@@ -38,14 +38,14 @@ receptor = GPSFactory.createReceptorFromRinexFile(fileContentReceptor, (1,2,3), 
 
 def test_13():
     r = RinexFileReader()
-    receptores = r.readReceptorFromObservation('test/Base3070.05o')
-    satelites = r.readGPSFromEphemeris('test/Base3070.05n')
+    receptores = r.readReceptorFromObservation('test/UNISINOS/Base3070.05o')
+    satelites = r.readGPSFromEphemeris('test/UNISINOS/Base3070.05n')
     #print('Receptor',receptores[0].sat_number,receptores[0].epochYear,receptores[0].epochMonth,receptores[0].epochDay,receptores[0].epochHour,receptores[0].epochMinute,receptores[0].epochSecond)
     #for i in range(len(satelites)):
     #    print(satelites[i].sat_number,satelites[i].epochYear,satelites[i].epochMonth,satelites[i].epochDay,satelites[i].epochHour,satelites[i].epochMinute,satelites[i].epochSecond)
     dic = r.transformGPSListDictionary(satelites)
     receptores[0].loadSateliteData(dic)
-    print(receptores[0].getCoordinates())
+    #print(receptores[0].getCoordinates())
     assert_equals(len(receptores[0].gps),8)
 
 

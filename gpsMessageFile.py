@@ -213,7 +213,7 @@ class GPSReceptor:
                 g = copy(lista[0])
                 g.dtr = (self.epochYear - g.epochYear)*365*24*60*60 + (self.epochMonth - g.epochMonth)*30*24*60*60 + (self.epochDay - g.epochDay)*24*60*60 + (self.epochHour - g.epochHour)*60*60 + (self.epochMinute - g.epochMinute)*60 + (self.epochSecond - g.epochSecond)
                 #print('dtr',g.dtr)
-
+                g.PD = self.sat_pseudo[g.sat_number]
                 self.gps.append(g)
                 #pseudodistancia
     def getCoordinates(self):

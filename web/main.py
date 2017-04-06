@@ -19,6 +19,7 @@ def index():
 def files():
     lista = []
     receptores = []
+    recep_comGPS = []
     max_receptor_count =  int(request.form['maxobs'])
 
     #print('Caiu no servidor')
