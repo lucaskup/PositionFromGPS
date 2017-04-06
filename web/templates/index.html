@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Posicionamento via GPS</title>
+    <meta charset="UTF-8">
+    <link href="static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="static/css/bootstrap-theme.min.css" rel="stylesheet">
+
+  </head>
+  <body>
+    <nav class="navbar navbar-inverse navbar-static-top">
+      <div class="container">
+        <div class="navbar-header">
+          <div class="navbar-brand" href="#">Posicionamento Via GPS</div>
+        </div>
+      </div>
+    </nav>
+    <div class="container" role="main">
+      <div class="row">
+
+      <form action="{{url_for('files')}}" method="post" enctype="multipart/form-data">
+        <div class="input-group" style="margin:10px">
+            <label class="input-group-btn">
+              <span class="btn btn-primary" style="width:148px">
+                Navigation File&hellip; <input type="file" name="nav_file" style="display: none;">
+              </span>
+            </label>
+            <input type="text" class="form-control" readonly>
+        </div>
+
+        <div class="input-group" style="margin-left:10px;margin-right:10px;margin-bottom:10px">
+            <label class="input-group-btn">
+              <span class="btn btn-primary" style="width:148px">
+                Observation Data&hellip; <input type="file" name="obs_file" style="display: none;">
+              </span>
+            </label>
+            <input type="text" class="form-control" readonly>
+        </div>
+
+        <div class="input-group" style="width:350px;margin-left:10px;margin-right:10px;margin-bottom:10px">
+          <span class="input-group-addon">Number of Observations to Process</span>
+          <input id="maxobs" name="maxobs" type="number" class="form-control" value="20">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-left:10px">Enviar</button>
+      </form>
+      </div>
+
+      <div class="row">
+        {% if listaReceptores %}
+        <div class="page-header">
+          <h1>Observation Data</h1>
+        </div>
+        <table id="obs_table" class="table table-hover table-condensed" style="margin:10px">
+
+          <thead>
+          <tr>
+            <th>#</th>
+            <th>Epoch</th>
+            <th>Coordinates</th>
+          </tr>
+          </thead>
+
+        {% for receptor in listaReceptores %}
+          <tr>
+            <td> {{ loop.index  }} </td>
+            <td> {{ receptor.epochYear }} {{receptor.epochMonth}} {{receptor.epochDay}} {{receptor.epochHour}} {{receptor.epochMinute}} {{receptor.epochSecond}}</td>
+            <td> {{ receptor.getCoordinates() }} </td>
+          </tr>
+        {% endfor %}
+        </table>
+
+        {% endif %}
+      </div>
+
+
+    <div class="row">
+      {% if listaGPS %}
+      <div class="page-header">
+        <h1>Navigation Data</h1>
+      </div>
+      <table class="table table-hover table-condensed" style="margin:10px">
+
+        <thead>
+        <tr>
+          <th>#</th>
+          <th>Sat#</th>
+          <th>Epoch</th>
+          <th>WGS84 Coordinates</th>
+        </tr>
+        </thead>
+
+      {% for gps in listaGPS %}
+        <tr>
+          <td> {{ loop.index  }} </td>
+          <td> {{ gps.sat_number }} </td>
+          <td> {{ gps.epochYear }} {{gps.epochMonth}} {{gps.epochDay}} {{gps.epochHour}} {{gps.epochMinute}} {{gps.epochSecond}}</td>
+          <td> {{ gps.coordinate_WGS84() }} </td>
+        </tr>
+      {% endfor %}
+      </table>
+
+      {% endif %}
+    </div>
+    </div>
+    <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <!-- Include all compiled plugins (below), or include individual files as needed -->
+    <script src="static/js/bootstrap.min.js"></script>
+    <script src="static/js/filepick.js"></script>
+  </body>
+</html>

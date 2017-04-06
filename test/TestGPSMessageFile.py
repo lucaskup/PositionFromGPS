@@ -1,5 +1,6 @@
 from gpsMessageFile import GpsMessageFile
 from gpsMessageFile import GPSFactory
+from gpsMessageFile import RinexFileReader
 from nose.tools import assert_equals
 
 fileContent = ["G01 2017 02 13 22 00 00 4.918128252029E-05 9.094947017729E-13 0.000000000000E+00",
@@ -10,7 +11,7 @@ fileContent = ["G01 2017 02 13 22 00 00 4.918128252029E-05 9.094947017729E-13 0.
                "    -2.078658013021E-10 1.000000000000E+00 1.936000000000E+03 0.000000000000E+00",
                "     2.000000000000E+00 0.000000000000E+00 5.122274160385E-09 6.000000000000E+00",
                "     1.584180000000E+05 4.000000000000E+00"]
-gps = GPSFactory.createGPSFromRinexFile(fileContent,'3')
+gps = GPSFactory.createGPSFromRinexFile(fileContent,3)
 fileContent2 = [' 1 02  1 10  0  0  0.0 2.108854241669E-04 1.591615728103E-12 0.000000000000E+00',
      '    1.740000000000E+02-6.625000000000E+01 3.994452099249E-09 2.453913345123E+00',
      '   -3.479421138763E-06 5.274268332869E-03 1.066364347935E-05 5.153708732605E+03',
@@ -19,7 +20,45 @@ fileContent2 = [' 1 02  1 10  0  0  0.0 2.108854241669E-04 1.591615728103E-12 0.
      '    3.507288949806E-10 0.000000000000E+00 1.148000000000E+03 0.000000000000E+00',
      '    2.800000000000E+00 0.000000000000E+00-3.259629011154E-09 4.300000000000E+02',
      '    3.455400000000E+05']
-gps2 = GPSFactory.createGPSFromRinexFile(fileContent2,'2')
+
+gps2 = GPSFactory.createGPSFromRinexFile(fileContent2,2)
+
+
+fileContentReceptor = ["  5 11  3 16  0  0.0000000  0  8G14G19G 1G 3G22G20G11G25",
+"  21286668.455   111862187.04947  21286668.514    87165341.44247",
+"  21267496.922   111761439.40447  21267495.926    87086832.71248",
+"  20081605.043   105529566.39347  20081606.065    82230836.41048",
+"  22593501.765   118729615.82047  22593505.077    92516581.20747",
+"  23663167.973   124350739.80947  23663170.114    96896675.78146",
+"  24096330.954   126627077.26446  24096336.220    98670478.13946",
+"  22054493.203   115897167.96247  22054494.097    90309499.84847",
+"  22879205.847   120231083.78046  22879210.454    93686594.71447"]
+
+receptor = GPSFactory.createReceptorFromRinexFile(fileContentReceptor, (1,2,3), {' 2':14000},2)
+
+def test_13():
+    r = RinexFileReader()
+    receptores = r.readReceptorFromObservation('test/Base3070.05o')
+    satelites = r.readGPSFromEphemeris('test/Base3070.05n')
+    #print('Receptor',receptores[0].sat_number,receptores[0].epochYear,receptores[0].epochMonth,receptores[0].epochDay,receptores[0].epochHour,receptores[0].epochMinute,receptores[0].epochSecond)
+    #for i in range(len(satelites)):
+    #    print(satelites[i].sat_number,satelites[i].epochYear,satelites[i].epochMonth,satelites[i].epochDay,satelites[i].epochHour,satelites[i].epochMinute,satelites[i].epochSecond)
+    dic = r.transformGPSListDictionary(satelites)
+    receptores[0].loadSateliteData(dic)
+    print(receptores[0].getCoordinates())
+    assert_equals(len(receptores[0].gps),8)
+
+
+def test_12():
+    assert_equals(receptor.epochYear, 5)
+    assert_equals(receptor.epochMonth, 11)
+    assert_equals(receptor.epochDay, 3)
+    assert_equals(receptor.epochHour, 16)
+    assert_equals(receptor.epochMinute, 0)
+    assert_equals(receptor.epochSecond, 0)
+
+def test_11():
+    assert_equals(receptor.aprox_pos, (1,2,3))
 
 def test_10():
     gps2.coord_mult = -3
@@ -83,12 +122,12 @@ def test_02():
 #first line
 def test_01():
     assert_equals(gps.sat_number, "G01")
-    assert_equals(gps.epochYear, "2017")
-    assert_equals(gps.epochMonth, "02")
-    assert_equals(gps.epochDay, "13")
-    assert_equals(gps.epochHour, "22")
-    assert_equals(gps.epochMinute, "00")
-    assert_equals(gps.epochSecond, "00")
+    assert_equals(gps.epochYear, 2017)
+    assert_equals(gps.epochMonth, 2)
+    assert_equals(gps.epochDay, 13)
+    assert_equals(gps.epochHour, 22)
+    assert_equals(gps.epochMinute, 0)
+    assert_equals(gps.epochSecond, 0)
     assert_equals(gps.sv_clock_bias, 4.918128252029E-05)
     assert_equals(gps.sv_clock_drift, 9.094947017729E-13)
     assert_equals(gps.sv_clock_drift_rate, 0.000000000000E+00)

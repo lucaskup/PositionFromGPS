@@ -1,25 +1,108 @@
 import math
+import numpy as np
+from numpy.linalg import inv
+from copy import deepcopy
+from copy import copy
 class RinexFileReader:
-    def readGPSFromEphemeris(self,fileType,fileName):
+    def transformGPSListDictionary(self,lista):
+        dic = {}
+        for gps in lista:
+            if gps.sat_number in dic:
+                dic[gps.sat_number].append(gps)
+            else:
+                dic[gps.sat_number] = [gps]
+        return dic
+
+    def readReceptorFromObservation(self,fileName):
         l = []
         with open(fileName,'r') as file:
+            #print('Abriu Arquivo')
             content = file.readlines()
             file.seek(0)
             endOfHeaderLineNumber = 0
+            _version = 0
+            _aprox_position = (0,0,0)
+            _sat_pseudoDistance = {}
             for i in range(len(content)):
+                #print('Linha ',str(i),content[i])
+                #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
+                if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
+                    _version = int(round(float(content[i][:10].strip()),0))
+                    #print('detectou versao',str(_version))
+                #Detecta o fim do header do arquivo para possibilitar a importação dos dados
+                #dos GPSs
+                if content[i][-21:].strip() == 'APPROX POSITION XYZ':
+                    dist = content[i][:50].strip().split(' ')
+                    _aprox_position = (float(dist[0]),float(dist[1]),float(dist[2]))
+                if content[i][-21:].strip() == 'PRN / # OF OBS':
+                    _sat_pseudoDistance[content[i][4:6].strip()] = int(content[i][7:13].strip())
                 if 'END OF HEADER' in content[i]:
                     endOfHeaderLineNumber = i
+                    #print('detectou header',str(i))
                     break
-            iterationNumber = (len(content) - endOfHeaderLineNumber-1) // 8
-            for i in range(iterationNumber):
-                posToCut = endOfHeaderLineNumber+1+(8*i)
-                gpsData = content[posToCut:posToCut+9]
-                for i in range(len(gpsData)):
-                    gpsData[i] = gpsData[i].replace('D', 'E')
-                l.append(GPSFactory.createGPSFromRinexFile(gpsData,fileType))
+            if _version == 2:
+
+                #print(content[endOfHeaderLineNumber + 1])
+                total_lines = len(content) - endOfHeaderLineNumber - 1
+                lines_visited = 0
+                while lines_visited < total_lines:
+                    #print(lines_visited,total_lines)
+                    linhas_pular = int(content[endOfHeaderLineNumber + 1 + lines_visited][30:32])
+                    #print(linhas_pular,content[endOfHeaderLineNumber + 1 + lines_visited])
+
+                    gpsData = content[endOfHeaderLineNumber + 1 + lines_visited:endOfHeaderLineNumber  + lines_visited+linhas_pular]
+                    lines_visited += linhas_pular+1
+                    for i in range(len(gpsData)):
+                        gpsData[i] = gpsData[i].replace('D', 'E')
+                    if _version == 2:
+                        l.append(GPSFactory.createReceptorFromRinexFile(gpsData, _aprox_position, _sat_pseudoDistance, _version))
+            else:
+                l = None
+        return l
+    def readGPSFromEphemeris(self,fileName):
+        l = []
+
+        with open(fileName,'r') as file:
+            #print('Abriu Arquivo')
+            content = file.readlines()
+            file.seek(0)
+            endOfHeaderLineNumber = 0
+            _version = 0
+            for i in range(len(content)):
+                #print('Linha ',str(i),content[i])
+                #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
+                if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
+                    _version = int(round(float(content[i][:10].strip()),0))
+                    #print('detectou versao',str(_version))
+                #Detecta o fim do header do arquivo para possibilitar a importação dos dados
+                #dos GPSs
+                if 'END OF HEADER' in content[i]:
+                    endOfHeaderLineNumber = i
+                    #print('detectou header',str(i))
+                    break
+            if _version == 2 or _version == 3:
+                iterationNumber = (len(content) - endOfHeaderLineNumber-1) // 8
+                for i in range(iterationNumber):
+
+                    posToCut = endOfHeaderLineNumber+1+(8*i)
+                    gpsData = content[posToCut:posToCut+9]
+                    for i in range(len(gpsData)):
+                        gpsData[i] = gpsData[i].replace('D', 'E')
+                    if _version == 2 or gpsData[0][0] == 'G':
+                        l.append(GPSFactory.createGPSFromRinexFile(gpsData,_version))
+            else:
+                l = None
         return l
 
 class GpsMessageFile:
+    def __init__(self):
+        """dtr e o tempo que passou desde o horario importado que consta no arquivo importado"""
+        self.dtr = 0
+        """PD e a informacao de pseudo distancia que deve ser passada para tornar os calculos de posicao mais precisos"""
+        self.PD = 0
+        """o atributo coord_mult serve para aplicar um multiplicador 10**coord_mult ao resultado, permitindo variar
+        a unidade da resposta entre metros e quilometros, por exemplo"""
+        self.coord_mult = 0
     def deltaTsv(self):
         #PRECISA DE REVISAO
         #%tr   = (dia*24+hora)*3600+(minu*60)+seg;
@@ -56,10 +139,11 @@ class GpsMessageFile:
         e0 = self.M()
         e1 = self.M() + self.eccentricity*math.sin(e0)
         lim = 0
-        while e0 != e1 or lim >10:
+        while e0 != e1 and lim < 15:
             e0 = e1
             e1 = self.M() + self.eccentricity*math.sin(e0)
             lim += 1
+            #print('lim',lim,e1)
         return e1
     #True Anomaly
     def V(self):
@@ -107,20 +191,83 @@ class GpsMessageFile:
         return self.y_OrbitalPlane()*math.sin(self.I())
     def coordinate_WGS84(self):
         return (self.x_WGS84(),self.y_WGS84(),self.z_WGS84())
+
+class GPSReceptor:
     def __init__(self):
-        """dtr e o tempo que passou desde o horario importado que consta no arquivo importado"""
-        self.dtr = 0
-        """PD e a informacao de pseudo distancia que deve ser passada para tornar os calculos de posicao mais precisos"""
-        self.PD = 0
-        """o atributo coord_mult serve para aplicar um multiplicador 10**coord_mult ao resultado, permitindo variar
-        a unidade da resposta entre metros e quilometros, por exemplo"""
-        self.coord_mult = 0
+        self.aprox_pos = (0,0,0)
+        self.sat_number = []
+        self.gps = []
+        self.epochYear = ''
+        self.epochMonth = ''
+        self.epochDay = ''
+        self.epochHour = ''
+        self.epochMinute = ''
+        self.epochSecond = ''
+        self.sat_pseudo = {}
+    def loadSateliteData(self,dic):
+        for sat in self.sat_number:
+            #print('sat',sat)
+            lista = dic[sat]
+            if len(lista) > 0:
+                lista = sorted(lista,key=lambda gps: abs(self.epochYear - gps.epochYear)*365*24*60*60 + abs(self.epochMonth - gps.epochMonth)*30*24*60*60 + abs(self.epochDay - gps.epochDay)*24*60*60 + abs(self.epochHour - gps.epochHour)*60*60 + abs(self.epochMinute - gps.epochMinute)*60 + abs(self.epochSecond - gps.epochSecond))
+                g = copy(lista[0])
+                g.dtr = (self.epochYear - g.epochYear)*365*24*60*60 + (self.epochMonth - g.epochMonth)*30*24*60*60 + (self.epochDay - g.epochDay)*24*60*60 + (self.epochHour - g.epochHour)*60*60 + (self.epochMinute - g.epochMinute)*60 + (self.epochSecond - g.epochSecond)
+                #print('dtr',g.dtr)
+
+                self.gps.append(g)
+                #pseudodistancia
+    def getCoordinates(self):
+        if len(self.gps) <= 0:
+            return None
+        lista_a = []
+        lista_L = []
+        for gps in self.gps:
+            #print('gps',gps.sat_number,str(gps.epochHour),str(gps.epochMinute),str(gps.epochSecond),'dtr',gps.dtr)
+            gps_coord = gps.coordinate_WGS84()
+            #print(gps_coord)
+            denominator = ((self.aprox_pos[0] - gps_coord[0])**2 + (self.aprox_pos[1] - gps_coord[1])**2 + (self.aprox_pos[2] - gps_coord[2])**2)**0.5
+            lista_a.append([(self.aprox_pos[0] - gps_coord[0])/denominator,
+                            (self.aprox_pos[1] - gps_coord[1])/denominator,
+                            (self.aprox_pos[2] - gps_coord[2])/denominator,
+                            1])
+            lista_L.append(self.sat_pseudo[gps.sat_number])
+        matrix_L = np.matrix(lista_L).transpose()
+        matriz_a = np.matrix(lista_a)
+        matriz_aT = matriz_a.transpose()
+        matrix_deltaX = np.dot(inv(np.dot(matriz_aT,matriz_a)),
+                                np.dot(matriz_aT,matrix_L))
+        lista_X0 = [self.aprox_pos[0],self.aprox_pos[1],self.aprox_pos[2],0]
+        matrix_X0 = np.matrix(lista_X0)
+        matrix_Xa = matrix_X0 + matrix_deltaX
+        return (matrix_Xa.A[0][0],matrix_Xa.A[0][1],matrix_Xa.A[0][2])
 
 
 """Classe responsavel por criar instancias de GpsMessageFile de acordo com o Layout Rinex 2 ou Rinex 3"""
 class GPSFactory:
+    def createReceptorFromRinexFile(fileBlock, aprox_pos, sat_pseudo, version):
+        if version == 2:
+            g = GPSFactory._receptorFromRinex2(fileBlock, aprox_pos, sat_pseudo)
+        return g
+    def _receptorFromRinex2(fileBlock,aprox_pos, sat_pseudo):
+        r = GPSReceptor()
+        r.aprox_pos = aprox_pos
+        r.sat_number = []
+        r.gps = []
+        r.sat_pseudo = sat_pseudo
+        auxString = fileBlock[0][31:].strip()
+        auxSats = auxString.split('G')
+        for i in range(1,len(auxSats)):
+            r.sat_number.append(auxSats[i].strip())
+        r.epochYear = int(fileBlock[0][0:3])
+        r.epochMonth = int(fileBlock[0][4:6])
+        r.epochDay = int(fileBlock[0][8:10])
+        r.epochHour = int(fileBlock[0][10:12])
+        r.epochMinute = int(fileBlock[0][13:15])
+        r.epochSecond = int(round(float(fileBlock[0][16:26]),0))
+        return r
+
     def createGPSFromRinexFile(fileBlock, version):
-        if version == '2':
+        if version == 2:
             g = GPSFactory._gpsFromRinex2(fileBlock)
         else:
             g = GPSFactory._gpsFromRinex3(fileBlock)
@@ -128,13 +275,13 @@ class GPSFactory:
     def _gpsFromRinex2(fileBlock):
         g = GpsMessageFile()
         #first line
-        g.sat_number = fileBlock[0][0:3]
-        g.epochYear = fileBlock[0][4:6]
-        g.epochMonth = fileBlock[0][7:9]
-        g.epochDay = fileBlock[0][10:12]
-        g.epochHour = fileBlock[0][13:15]
-        g.epochMinute = fileBlock[0][16:18]
-        g.epochSecond = fileBlock[0][19:23]
+        g.sat_number = fileBlock[0][0:3].strip()
+        g.epochYear = int(fileBlock[0][3:5])
+        g.epochMonth = int(fileBlock[0][6:8])
+        g.epochDay = int(fileBlock[0][9:11])
+        g.epochHour = int(fileBlock[0][12:14])
+        g.epochMinute = int(fileBlock[0][15:17])
+        g.epochSecond = int(round(float(fileBlock[0][18:22]),0))
         g.sv_clock_bias = float(fileBlock[0][22:41])
         g.sv_clock_drift = float(fileBlock[0][41:60])
         g.sv_clock_drift_rate = float(fileBlock[0][60:79])
@@ -183,13 +330,13 @@ class GPSFactory:
     def _gpsFromRinex3(fileBlock):
         g = GpsMessageFile()
         #first line
-        g.sat_number = fileBlock[0][0:3]
-        g.epochYear = fileBlock[0][4:8]
-        g.epochMonth = fileBlock[0][9:11]
-        g.epochDay = fileBlock[0][12:14]
-        g.epochHour = fileBlock[0][15:17]
-        g.epochMinute = fileBlock[0][18:20]
-        g.epochSecond = fileBlock[0][21:23]
+        g.sat_number = fileBlock[0][0:3].strip()
+        g.epochYear = int(fileBlock[0][4:8])
+        g.epochMonth = int(fileBlock[0][9:11])
+        g.epochDay = int(fileBlock[0][12:14])
+        g.epochHour = int(fileBlock[0][15:17])
+        g.epochMinute = int(fileBlock[0][18:20])
+        g.epochSecond = int(fileBlock[0][21:23])
         g.sv_clock_bias = float(fileBlock[0][24:42])
         g.sv_clock_drift = float(fileBlock[0][43:61])
         g.sv_clock_drift_rate = float(fileBlock[0][62:80])
