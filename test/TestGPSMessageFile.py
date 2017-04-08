@@ -63,7 +63,7 @@ def test_11():
 def test_10():
     gps2.coord_mult = -3
     gps2.dtr = 900
-    assert_equals(gps2.coordinate_WGS84(), (20573.622159228864,   3151.6233033090466,  16691.438710244893))
+    assert_equals(gps2.coordinate_WGS84(), (20573.62215922887,   3151.6233033090402,  16691.438710244885))
 
 def test_09():
     gps2.coord_mult = -3
