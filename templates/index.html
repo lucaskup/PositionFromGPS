@@ -45,6 +45,12 @@
       </form>
       </div>
 
+      {% if listaReceptores %}
+      <div class="row">
+        <iframe src="{{ url_for('show_map') }}" style="width:100%;height:350px;border:none;margin-top:50px"></iframe>
+      </div>
+      {% endif %}
+
       <div class="row">
         {% if listaReceptores %}
         <div class="page-header">
@@ -149,6 +155,7 @@
 
       {% endif %}
     </div>
+
     </div>
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
 

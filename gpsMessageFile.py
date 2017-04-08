@@ -204,6 +204,8 @@ class GPSReceptor:
         self.epochMinute = ''
         self.epochSecond = ''
         self.sat_pseudo = {}
+    def epoch(self):
+        return str(self.epochYear) +'-'+str(self.epochMonth)+'-'+str(self.epochDay)+'-'+str(self.epochHour)+'-'+str(self.epochMinute)+'-'+str(self.epochSecond)
     def loadSateliteData(self,dic):
         for sat in self.sat_number:
             #print('sat',sat)

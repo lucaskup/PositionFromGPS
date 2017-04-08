@@ -5,6 +5,8 @@ import sys
 sys.path.append("..")
 from gpsMessageFile import RinexFileReader
 
+import folium
+import pyproj
 
 UPLOAD_FOLDER = '.'
 r = RinexFileReader()
@@ -14,6 +16,10 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/map',methods = ['GET'])
+def show_map():
+    return render_template('map.html')
 
 @app.route('/files',methods = ['POST'])
 def files():
@@ -54,13 +60,34 @@ def files():
                     break
                 receptores[i].loadSateliteData(dic)
                 recep_comGPS.append(receptores[i])
-
+            salvaMapa(converteLatLong(recep_comGPS))
             #print('Verificar',receptores[55].aprox_pos, receptores[55].sat_number,receptores[55].gps,receptores[55].sat_pseudo)
             #print(receptores[55].getCoordinates())
             #print('Verificou')
         #print(lista[0].coordinate_WGS84())
     return render_template('index.html',listaGPS = lista, listaReceptores = recep_comGPS)
 
+def converteLatLong(listaReceptores):
+    listaLatLong = []
+    for receptor in listaReceptores:
+        x,y,z = receptor.getCoordinates()
+        ecef = pyproj.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
+        lla = pyproj.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
+        lon, lat, alt = pyproj.transform(ecef, lla, x, y, z, radians=False)
+        listaLatLong.append((receptor.epoch(),lat,lon,alt))
+    return listaLatLong
+
+
+def salvaMapa(listaMarcadores):
+    if(len(listaMarcadores)>0):
+        map = folium.Map(location=[listaMarcadores[0][1],listaMarcadores[0][2]],zoom_start=13, tiles = 'openstreetmap')
+
+        fg = folium.FeatureGroup(name='Receptor')
+        for sat,lat,lon,alt in listaMarcadores:
+                fg.add_child(folium.Marker(location=[lat,lon],popup=sat,icon = folium.Icon(color='green')))
+        #map.simple_marker(location=[45.3311,-121.7311],popup='Timberlake Lodge', marker_color='green')
+        map.add_child(fg)
+        map.save(outfile='templates/map.html')
 
 if __name__=='__main__':
     app.run(debug=True)
