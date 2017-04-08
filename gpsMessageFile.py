@@ -147,12 +147,29 @@ class GpsMessageFile:
         return e1
     #True Anomaly
     def V(self):
+        #senv = (((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(1-self.eccentricity*math.cos(self.E()))
+        #cosv = (math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E()))
+        #tanv = senv/cosv
+
+        #    atanv = math.atan(tanv);
+        #elif senv >= 0.0 and cosv <= 0.0:
+        #    atanv = math.pi + math.atan(tanv)
+        #elif senv < 0.0 and cosv < 0.0:
+        #    atanv = math.pi + math.atan(tanv)
+        #elif senv < 0.0 and cosv >= 0.0:
+        #    atanv = 2*math.pi + math.atan(tanv);
+
+        #return atanv
+
         #print('eccentricity',str(self.eccentricity))
         #print('E',str(self.E()))
         #print(str(math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))))
         #print(str(math.asin((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(1-self.eccentricity*math.cos(self.E())))))
-        #print(str(math.atan((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(math.cos(self.E())-self.eccentricity))))
-        return math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))
+        #print(self.sat_number,str(senv),str(cosv),str(tanv),str((math.atan((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(math.cos(self.E())-self.eccentricity)))))
+        return  (math.atan((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(math.cos(self.E())-self.eccentricity)))
+
+
+        #return math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))
         #return math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))
     def VplusOmega(self):
         return self.V() + self.omega
@@ -224,6 +241,7 @@ class GPSReceptor:
         lista_a = []
         lista_L = []
         for gps in self.gps:
+            
             #print('gps',gps.sat_number,str(gps.epochHour),str(gps.epochMinute),str(gps.epochSecond),'dtr',gps.dtr)
             gps_coord = gps.coordinate_WGS84()
             #print(gps_coord)
