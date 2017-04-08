@@ -259,9 +259,9 @@ class GPSReceptor:
         lista_X0 = [self.aprox_pos[0],self.aprox_pos[1],self.aprox_pos[2],0]
         matrix_X0 = np.matrix(lista_X0).transpose()
         matrix_Xa = matrix_X0 + matrix_deltaX
-        print('mariz deltaX',matrix_deltaX)
-        print('mariz X0',matrix_X0)
-        print('mariz Xa',matrix_Xa)
+        #print('mariz deltaX',matrix_deltaX)
+        #print('mariz X0',matrix_X0)
+        #print('mariz Xa',matrix_Xa)
         return (matrix_Xa.A[0][0],matrix_Xa.A[1][0],matrix_Xa.A[2][0])
 
 
