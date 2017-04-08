@@ -147,19 +147,19 @@ class GpsMessageFile:
         return e1
     #True Anomaly
     def V(self):
-        #senv = (((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(1-self.eccentricity*math.cos(self.E()))
-        #cosv = (math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E()))
-        #tanv = senv/cosv
+        senv = (((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(1-self.eccentricity*math.cos(self.E()))
+        cosv = (math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E()))
+        tanv = senv/cosv
 
-        #    atanv = math.atan(tanv);
-        #elif senv >= 0.0 and cosv <= 0.0:
+        #atanv = math.atan(tanv);
+        #if senv >= 0.0 and cosv <= 0.0:
         #    atanv = math.pi + math.atan(tanv)
         #elif senv < 0.0 and cosv < 0.0:
         #    atanv = math.pi + math.atan(tanv)
         #elif senv < 0.0 and cosv >= 0.0:
         #    atanv = 2*math.pi + math.atan(tanv);
 
-        #return atanv
+        return math.atan2(senv,cosv)
 
         #print('eccentricity',str(self.eccentricity))
         #print('E',str(self.E()))
@@ -241,7 +241,7 @@ class GPSReceptor:
         lista_a = []
         lista_L = []
         for gps in self.gps:
-            
+
             #print('gps',gps.sat_number,str(gps.epochHour),str(gps.epochMinute),str(gps.epochSecond),'dtr',gps.dtr)
             gps_coord = gps.coordinate_WGS84()
             #print(gps_coord)
@@ -257,9 +257,12 @@ class GPSReceptor:
         matrix_deltaX = np.dot(inv(np.dot(matriz_aT,matriz_a)),
                                 np.dot(matriz_aT,matrix_L))
         lista_X0 = [self.aprox_pos[0],self.aprox_pos[1],self.aprox_pos[2],0]
-        matrix_X0 = np.matrix(lista_X0)
+        matrix_X0 = np.matrix(lista_X0).transpose()
         matrix_Xa = matrix_X0 + matrix_deltaX
-        return (matrix_Xa.A[0][0],matrix_Xa.A[0][1],matrix_Xa.A[0][2])
+        print('mariz deltaX',matrix_deltaX)
+        print('mariz X0',matrix_X0)
+        print('mariz Xa',matrix_Xa)
+        return (matrix_Xa.A[0][0],matrix_Xa.A[1][0],matrix_Xa.A[2][0])
 
 
 """Classe responsavel por criar instancias de GpsMessageFile de acordo com o Layout Rinex 2 ou Rinex 3"""
