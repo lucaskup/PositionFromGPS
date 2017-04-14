@@ -26,7 +26,7 @@ def files():
     lista = []
     receptores = []
     recep_comGPS = []
-    max_receptor_count =  int(request.form['maxobs'])
+    max_obs =  int(request.form['maxobs'])
 
     #print('Caiu no servidor')
     if request.method == 'POST':
@@ -39,7 +39,7 @@ def files():
             filename = secure_filename(f.filename)
             f.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         #print(filename)
-        lista = r.readGPSFromEphemeris(filename)
+        lista = r.readFromEphemeris(filename)
         os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
         f2 = request.files['obs_file']
@@ -51,36 +51,38 @@ def files():
             f2.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         #print(filename)
             recep_comGPS = []
-            receptores = r.readReceptorFromObservation(filename)
+            receptor = r.readFromObservation(filename,lista,max_obs)
+            receptor.calculate_receiverPosition()
             os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            dic =  r.transformGPSListDictionary(lista)
-            #receptores[55].loadSateliteData(dic)
-            for i in range(len(receptores)):
-                if max_receptor_count != None and i>= max_receptor_count:
-                    break
-                receptores[i].loadSateliteData(dic)
-                recep_comGPS.append(receptores[i])
-            salvaMapa(converteLatLong(recep_comGPS))
+
+
+            salvaMapa(converteLatLong(receptor))
+
+            listaGPS = []
+            for sat in lista:
+                for ephem in lista[sat]:
+                    listaGPS.append(ephem)
+            listaGPS = sorted(listaGPS,key=lambda e: e.toc())
             #print('Verificar',receptores[55].aprox_pos, receptores[55].sat_number,receptores[55].gps,receptores[55].sat_pseudo)
             #print(receptores[55].getCoordinates())
             #print('Verificou')
         #print(lista[0].coordinate_WGS84())
-    return render_template('index.html',listaGPS = lista, listaReceptores = recep_comGPS)
+    return render_template('index.html',listaGPS = listaGPS, receptor = receptor)
 
-def converteLatLong(listaReceptores):
+def converteLatLong(receptor):
     listaLatLong = []
-    for receptor in listaReceptores:
-        x,y,z = receptor.getCoordinates()
+    for obs in receptor.observations:
+        x,y,z = obs.rec_xyz
         ecef = pyproj.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
         lla = pyproj.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
         lon, lat, alt = pyproj.transform(ecef, lla, x, y, z, radians=False)
-        listaLatLong.append((receptor.epoch(),lat,lon,alt))
+        listaLatLong.append((str(obs.gpsSeconds()),lat,lon,alt))
     return listaLatLong
 
 
 def salvaMapa(listaMarcadores):
     if(len(listaMarcadores)>0):
-        map = folium.Map(location=[listaMarcadores[0][1],listaMarcadores[0][2]],zoom_start=13, tiles = 'openstreetmap')
+        map = folium.Map(location=[listaMarcadores[0][1],listaMarcadores[0][2]],zoom_start=16, tiles = 'openstreetmap')
 
         fg = folium.FeatureGroup(name='Receptor')
         for sat,lat,lon,alt in listaMarcadores:

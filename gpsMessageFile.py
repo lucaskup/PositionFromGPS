@@ -5,459 +5,597 @@ from numpy.linalg import norm
 
 from copy import deepcopy
 from copy import copy
+from math import floor
+from datetime import datetime
+
+#Constantes uteis para os calculos
+c = 299792458          #----> Speed of light (meters/s).
+L1 = 1575.42E6         #----> Freqs in Hz.
+L2 = 1227.60E6
+L5 = 1176.45E6
+
+LAMBDA_L1 = c / L1     #----> Wavelengths in meters.
+LAMBDA_L2 = c / L2
+LAMBDA_L5 = c / L5
+
+
 class RinexFileReader:
-    def transformGPSListDictionary(self,lista):
-        dic = {}
-        for gps in lista:
-            if gps.sat_number in dic:
-                dic[gps.sat_number].append(gps)
-            else:
-                dic[gps.sat_number] = [gps]
-        return dic
-
-    def readReceptorFromObservation(self,fileName):
-        l = []
+    def readFromObservation(self,fileName,ephem,max_obs):
         with open(fileName,'r') as file:
             #print('Abriu Arquivo')
             content = file.readlines()
-            file.seek(0)
-            endOfHeaderLineNumber = 0
-            _version = 0
-            _aprox_position = (0,0,0)
-            _sat_pseudoDistance = {}
-            for i in range(len(content)):
-                #print('Linha ',str(i),content[i])
-                #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
-                if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
-                    _version = int(round(float(content[i][:10].strip()),0))
-                    #print('detectou versao',str(_version))
-                #Detecta o fim do header do arquivo para possibilitar a importação dos dados
-                #dos GPSs
-                if content[i][-21:].strip() == 'APPROX POSITION XYZ':
-                    dist = content[i][:50].strip().split(' ')
-                    _aprox_position = (float(dist[0]),float(dist[1]),float(dist[2]))
-                if content[i][-21:].strip() == 'PRN / # OF OBS':
-                    _sat_pseudoDistance[content[i][4:6].strip()] = int(content[i][7:13].strip())
-                if 'END OF HEADER' in content[i]:
-                    endOfHeaderLineNumber = i
-                    #print('detectou header',str(i))
-                    break
-            if _version == 2:
+        lista_obs = []
+        _aprox_position = (0,0,0)
+        for i in range(len(content)):
+            #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
+            if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
+                _version = int(round(float(content[i][:10].strip()),0))
+                #print('detectou versao',str(_version))
 
-                #print(content[endOfHeaderLineNumber + 1])
-                total_lines = len(content) - endOfHeaderLineNumber - 1
-                lines_visited = 0
-                while lines_visited < total_lines:
-                    #print(lines_visited,total_lines)
-                    linhas_pular = int(content[endOfHeaderLineNumber + 1 + lines_visited][30:32])
-                    #print(linhas_pular,content[endOfHeaderLineNumber + 1 + lines_visited])
+            if content[i][-21:].strip() == 'APPROX POSITION XYZ':
+                dist = content[i][:50].strip().split(' ')
+                _aprox_position = (float(dist[0]),float(dist[1]),float(dist[2]))
+            #Detecta o fim do header do arquivo para possibilitar a importação dos dados
+            #dos GPSs
+            if 'END OF HEADER' in content[i]:
+                endOfHeaderLineNumber = i
+                #print('detectou header',str(i))
+                break
 
-                    gpsData = content[endOfHeaderLineNumber + 1 + lines_visited:endOfHeaderLineNumber  + lines_visited+linhas_pular+2]
-                    lines_visited += linhas_pular+1
-                    for i in range(len(gpsData)):
-                        gpsData[i] = gpsData[i].replace('D', 'E')
-                    if _version == 2:
-                        l.append(GPSFactory.createReceptorFromRinexFile(gpsData, _aprox_position, _sat_pseudoDistance, _version))
-            else:
-                l = None
-        return l
-    def readGPSFromEphemeris(self,fileName):
-        l = []
+        if _version == 2:
+            total_lines = len(content) - endOfHeaderLineNumber - 1
+            lines_visited = 0
+            while lines_visited < total_lines:
+                linhas_pular = int(content[endOfHeaderLineNumber + 1 + lines_visited][30:32])
+                fileBlock = content[endOfHeaderLineNumber + 1 + lines_visited:endOfHeaderLineNumber  + lines_visited+linhas_pular+2]
+                lines_visited += linhas_pular+1
+                for i in range(len(fileBlock)):
+                    fileBlock[i] = fileBlock[i].replace('D', 'E')
+                if _version == 2:
+                    o = GPSFactory.createObservationFromRinexFile(fileBlock,_version)
+                    lista_obs.append(o)
+                    if max_obs == 1:
+                        break
+                    elif max_obs != 0:
+                        max_obs -= 1
+
+        else:
+            lista_obs = None
+        r = Receiver()
+        r.observations = lista_obs
+        r._aprox_position = _aprox_position
+        r.ephemeris = ephem
+        return r
+
+    def readFromEphemeris(self,fileName):
+
 
         with open(fileName,'r') as file:
             #print('Abriu Arquivo')
             content = file.readlines()
-            file.seek(0)
-            endOfHeaderLineNumber = 0
-            _version = 0
-            for i in range(len(content)):
-                #print('Linha ',str(i),content[i])
-                #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
-                if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
-                    _version = int(round(float(content[i][:10].strip()),0))
-                    #print('detectou versao',str(_version))
-                #Detecta o fim do header do arquivo para possibilitar a importação dos dados
-                #dos GPSs
-                if 'END OF HEADER' in content[i]:
-                    endOfHeaderLineNumber = i
-                    #print('detectou header',str(i))
-                    break
-            if _version == 2 or _version == 3:
-                iterationNumber = (len(content) - endOfHeaderLineNumber-1) // 8
-                for i in range(iterationNumber):
 
-                    posToCut = endOfHeaderLineNumber+1+(8*i)
-                    gpsData = content[posToCut:posToCut+9]
-                    for i in range(len(gpsData)):
-                        gpsData[i] = gpsData[i].replace('D', 'E')
-                    if _version == 2 or gpsData[0][0] == 'G':
-                        l.append(GPSFactory.createGPSFromRinexFile(gpsData,_version))
-            else:
-                l = None
-        return l
+        endOfHeaderLineNumber = 0
+        _version = 0
+        lista_ephe = {}
+        for i in range(len(content)):
+            #print('Linha ',str(i),content[i])
+            #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
+            if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
+                _version = int(round(float(content[i][:10].strip()),0))
+                #print('detectou versao',str(_version))
+            #Detecta o fim do header do arquivo para possibilitar a importação dos dados
+            #dos GPSs
+            if 'END OF HEADER' in content[i]:
+                endOfHeaderLineNumber = i
+                #print('detectou header',str(i))
+                break
+        if _version == 2 or _version == 3:
+            iterationNumber = (len(content) - endOfHeaderLineNumber-1) // 8
+            for i in range(iterationNumber):
 
-class GpsMessageFile:
+                posToCut = endOfHeaderLineNumber+1+(8*i)
+                fileBlock = content[posToCut:posToCut+9]
+                for i in range(len(fileBlock)):
+                    fileBlock[i] = fileBlock[i].replace('D', 'E')
+                if _version == 2 or fileBlock[0][0] == 'G':
+                    g = GPSFactory.createEphemerisFromRinexFile(fileBlock,_version)
+                    if g.sat_number not in lista_ephe:
+                        lista_ephe[g.sat_number] = []
+                    lista_ephe[g.sat_number].append(g)
+                else:
+                    lista_ephe = None
+        return lista_ephe
+class SatOrbit:
     def __init__(self):
-        """diffTimeEphObs e o tempo que passou desde o horario importado que consta no arquivo importado"""
-        self.diffTimeEphObs = 0
-
-        """PD e a informacao de pseudo distancia que deve ser passada para tornar os calculos de posicao mais precisos"""
-        self.PD = 0
-        """o atributo coord_mult serve para aplicar um multiplicador 10**coord_mult ao resultado, permitindo variar
-        a unidade da resposta entre metros e quilometros, por exemplo"""
-        self.coord_mult = 0
-    def deltaTsv(self):
-        #PRECISA DE REVISAO
-        #%tr   = (dia*24+hora)*3600+(minu*60)+seg;
-        #tr=(0*24+0)*3600+(0*60)+30
-        tr = self.toeTime
-        #PD = 0
-        #diffTimeEphObs = 0
-        c = 299792458
-        tgps = tr - self.PD/c;
-
-        dts  = self.sv_clock_bias + self.sv_clock_drift*(tgps - self.toeTime) + self.sv_clock_drift_rate*(tgps-self.toeTime)**2;
-
-        #%tempo de propagação aproximado do sinal
-        tal = self.PD/c - self.diffTimeEphObs + dts
-
-        tgps = tr - tal + dts;
-
-        #%time diff from toe
-
-        dt = tgps - self.toeTime;
-        return dt
-
-    def F(self):
-        return -4.442807633E-10 # Constant, [sec/(meter)^(1/2)]
-    def GM(self):
-        return 3.986005E+14
-    def omegaEarth(self):
-        return 7.292115090E-5
-    def n0(self):
-        return (self.GM()/(self.sqrtA**6))**0.5
-    def n(self):
-        return self.n0() + self.deltaN
-    def M(self):
-        return self.m0 + self.n()*self.deltaTsv()
-    #Keplers equation through iteration
-    def E(self):
-        e0 = self.M()
-        e1 = self.M() + self.eccentricity*math.sin(e0)
-        lim = 0
-        while e0 != e1 and lim < 15:
-            e0 = e1
-            e1 = self.M() + self.eccentricity*math.sin(e0)
-            lim += 1
-            #print('lim',lim,e1)
-        return e1
-    """dtr relativistc correction"""
-    def dtr(self):
-        return self.F() * self.eccentricity * self.sqrtA * math.sin(self.E())
-    def Rel(self):
-        return self.dtr()*299792458
-    """Compute satellite clock correction"""
-    def julianDay(self):
+        self.sat_number = 0
+        self.epochYear = 0
+        self.epochMonth = 0
+        self.epochDay = 0
+        self.epochHour = 0
+        self.epochMinute = 0
+        self.epochSecond = 0
+        self.c1 = 0
+        self.l1 = 0
+        self.p2 = 0
+        self.l2 = 0
+class GPSUtils:
+    def gpsWeek_seconds(epochYear,epochMonth,epochDay,epochHour,epochMinute,epochSecond):
+        secs_per_week = 604800
+        year = epochYear
         # Converts the two digit year to a four digit year.
         # Two digit year represents a year in the range 1980-2079.
-        if self.epochYear >= 80 and self.epochYear <= 99:
-            year = 1900 + self.epochYear;
+        if year >= 80 and year <= 99:
+            year = 1900 + year;
 
-        if self.epochYear >= 0 and self.epochYear <= 79:
-            year = 2000 + self.epochYear;
+        if year >= 0 and year <= 79:
+            year = 2000 + year;
 
         # Calculates the 'm' term used below from the given calendar month.
-        if self.epochMonth <= 2:
+        if epochMonth <= 2:
             y = year - 1;
-            m = self.epochMonth + 12;
-        if self.epochMonth > 2:
+            m = epochMonth + 12;
+        if epochMonth > 2:
             y = year
-            m = self.epochMonth
+            m = epochMonth
 
         #Computes the Julian date corresponding to the given calendar date.
-        return  round((365.25 * y),0) + round((30.6001 * (m+1)),0) + self.epochDay + ( (self.epochHour + self.epochMinute / 60 + self.epochSecond / 3600) / 24 ) + 1720981.5
-    def gpsWeek2(self):
-        return round( (self.julianDay() - 2444244.5) / 7 ,0)
-    def gpsSeconds(self):
-        secs_per_week = 604800
-        return round(((((self.julianDay()-2444244.5) / 7)-self.gpsWeek2())*secs_per_week)/0.5,0)*0.5
-    def satClkCorr(self):
+        julianDay = floor((365.25 * y)) + floor((30.6001 * (m+1))) + epochDay + ( (epochHour + epochMinute / 60 + epochSecond / 3600) / 24 ) + 1720981.5
+        gpsWeek = floor( (julianDay - 2444244.5) / 7)
+        gpsSeconds = round(((((julianDay-2444244.5) / 7)-gpsWeek)*secs_per_week)/0.5,0)*0.5
+        return (gpsWeek,gpsSeconds)
+    def kepOrb2E(M,e):
+        #print('Começo Kepler')
+        if -math.pi < M < 0 or M > math.pi:
+            E = M - e;
+        else:
+            E = M + e;
 
 
+        check = 1
+        i = 10
+        while check > 10E-10 and i > 0:
+            #print('teste',check,i)
+            E_new = (E + (M - E + e * math.sin(E))/(1 - e * math.cos(E)))
+            check = abs(E_new - E)
+            E = E_new
+            i -= 1
+        #print('Fim Kepler')
+        return E
 
-        clkCorr = (self.sv_clock_drift_rate * (self.diffTimeEphObs) + self.sv_clock_drift) * (self.diffTimeEphObs) + self.sv_clock_bias
-
-        return clkCorr*299792458
-    #True Anomaly
-    def V(self):
-        senv = (((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(1-self.eccentricity*math.cos(self.E()))
-        cosv = (math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E()))
-        tanv = senv/cosv
-
-        #atanv = math.atan(tanv);
-        #if senv >= 0.0 and cosv <= 0.0:
-        #    atanv = math.pi + math.atan(tanv)
-        #elif senv < 0.0 and cosv < 0.0:
-        #    atanv = math.pi + math.atan(tanv)
-        #elif senv < 0.0 and cosv >= 0.0:
-        #    atanv = 2*math.pi + math.atan(tanv);
-
-        return math.atan2(senv,cosv)
-
-        #print('eccentricity',str(self.eccentricity))
-        #print('E',str(self.E()))
-        #print(str(math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))))
-        #print(str(math.asin((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(1-self.eccentricity*math.cos(self.E())))))
-        #print(self.sat_number,str(senv),str(cosv),str(tanv),str((math.atan((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(math.cos(self.E())-self.eccentricity)))))
-        return  (math.atan((((1-self.eccentricity**2)**0.5)*math.sin(self.E()))/(math.cos(self.E())-self.eccentricity)))
-
-
-        #return math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))
-        #return math.acos((math.cos(self.E())-self.eccentricity)/(1-self.eccentricity*math.cos(self.E())))
-    def VplusOmega(self):
-        return self.V() + self.omega
-
-    def tetaU(self):
-        return self.cuc*math.cos(2*self.VplusOmega()) + self.cus*math.sin(2*self.VplusOmega())
-    def U(self):
-        return self.VplusOmega() + self.tetaU()
-
-    def tetaR(self):
-        return self.crc*math.cos(2*self.VplusOmega()) + self.crs*math.sin(2*self.VplusOmega())
-    def R(self):
-        return (self.sqrtA**2)*(1-self.eccentricity*math.cos(self.E())) + self.tetaR()
-
-    def x_OrbitalPlane(self):
-        return self.R()*math.cos(self.U())*10**self.coord_mult
-
-    def y_OrbitalPlane(self):
-        return self.R()*math.sin(self.U())*10**self.coord_mult
-
-    def coordinate_OrbitalPlane(self):
-        return (self.x_OrbitalPlane(),self.y_OrbitalPlane())
-
-    def tetaI(self):
-        return self.cic*math.cos(2*self.VplusOmega())+ self.cis*math.sin(2*self.VplusOmega())
-    def I(self):
-        return self.i0 + self.idot*self.deltaTsv() + self.tetaI()
-    def capitalOmega(self):
-        return self.omega0 + (self.omegaDot - self.omegaEarth())*self.deltaTsv()-self.omegaEarth()*self.toeTime
-
-    def x_WGS84(self):
-        return self.x_OrbitalPlane()*math.cos(self.capitalOmega()) - self.y_OrbitalPlane()*math.sin(self.capitalOmega())*math.cos(self.I())
-    def y_WGS84(self):
-        return self.x_OrbitalPlane()*math.sin(self.capitalOmega()) + self.y_OrbitalPlane()*math.cos(self.capitalOmega())*math.cos(self.I())
-    def z_WGS84(self):
-        return self.y_OrbitalPlane()*math.sin(self.I())
-    def coordinate_WGS84(self):
-        return (self.x_WGS84(),self.y_WGS84(),self.z_WGS84())
-
-class GPSReceptor:
+class Receiver:
     def __init__(self):
-        self.aprox_pos = (0,0,0)
-        self.sat_number = []
-        self.gps = []
-        self.epochYear = ''
-        self.epochMonth = ''
-        self.epochDay = ''
-        self.epochHour = ''
-        self.epochMinute = ''
-        self.epochSecond = ''
-        self.sat_pseudo = {}
-    def epoch(self):
-        return str(self.epochYear) +'-'+str(self.epochMonth)+'-'+str(self.epochDay)+'-'+str(self.epochHour)+'-'+str(self.epochMinute)+'-'+str(self.epochSecond)
-    def loadSateliteData(self,dic):
-        for sat in self.sat_number:
-            #print('sat',sat)
-            lista = dic[sat]
-            if len(lista) > 0:
-                lista = sorted(lista,key=lambda gps: abs(self.epochYear - gps.epochYear)*365*24*60*60 + abs(self.epochMonth - gps.epochMonth)*30*24*60*60 + abs(self.epochDay - gps.epochDay)*24*60*60 + abs(self.epochHour - gps.epochHour)*60*60 + abs(self.epochMinute - gps.epochMinute)*60 + abs(self.epochSecond - gps.epochSecond))
-                g = copy(lista[0])
-                g.CorrP1 = self.sat_obs_data[g.sat_number]['P3'] + g.satClkCorr() + g.Rel()
-                g.diffTimeEphObs = (self.epochYear - g.epochYear)*365*24*60*60 + (self.epochMonth - g.epochMonth)*30*24*60*60 + (self.epochDay - g.epochDay)*24*60*60 + (self.epochHour - g.epochHour)*60*60 + (self.epochMinute - g.epochMinute)*60 + (self.epochSecond - g.epochSecond)
-                #print('diffTimeEphObs',g.diffTimeEphObs)
-                g.PD = self.sat_pseudo[g.sat_number]
-                self.gps.append(g)
-                #pseudodistancia
-    def getCoordinates(self):
-        if len(self.gps) <= 0:
-            return None
+        self.observations = []
+        self.ephemeris = {}
+        self._aprox_position = (0,0,0)
+
+    def get_broadcast_orbits(self,obs,rec_pos):
+        meu = 3.986005E14;         # earth's universal gravitational [m^3/s^2]
+        odote = 7.2921151467E-5;   # earth's rotation rate (rad/sec)
+        lightspeed = 2.99792458E8; # speed of light (m/s)
+
+        F = -4.442807633E-10; # Constant, [sec/(meter)^(1/2)]
+
+        tsat = obs.gpsSeconds()
+        #print('Sat #',obs.sat_number)
+        for j in range(4):
+            lista = self.ephemeris[obs.sat_number]
+            lista = sorted(lista,key=lambda e: abs(tsat - e.gpsWeek()))
+            ephem = copy(lista[0])
+            ephem.a = ephem.sqrtA **2
+            ephem.dn = ephem.delta_n
+            ephem.omg0 = ephem.OMEGA
+            ephem.odot = ephem.OMEGA_dot
+
+            n0 = (meu/ephem.a**3)**0.5
+            #print('n0',n0)
+            t = tsat-ephem.toe
+            n = n0 + ephem.dn
+            m = ephem.M0 + n*t
+            #print('M0 coisas',ephem.M0,n,t,tsat,ephem.toe)
+            m_dot=n #% Calculate Velocity
+            E = GPSUtils.kepOrb2E(m,ephem.e)
+            #print('E',E)
+
+            #Compute relativistic correction term
+            dtr = F * ephem.e * ((ephem.a)**0.5) * math.sin(E)
+            obs.Rel = dtr*c
+
+            # Compute satellite clock correction
+            clkCorr= (ephem.af2 * (tsat-ephem.toc()) + ephem.af1) * (tsat-ephem.toc()) + ephem.af0
+            obs.satClkCorr = clkCorr*c
+            #print('ClockCorr',obs.satClkCorr)
+            t = t - clkCorr;
+
+            E_dot=m_dot/(1-ephem.e*math.cos(E)) #Calculate Velocity
+
+            obs.E = E
+            v = math.atan2(((1-ephem.e**2)**0.5)*math.sin(E),math.cos(E)-ephem.e)
+
+            v_dot=math.sin(E)*E_dot*(1+ephem.e*math.cos(v))/(math.sin(v)*(1-ephem.e*math.cos(E))) # Calculate Velocity
+
+
+            phi = v + ephem.omega
+
+            phi_dot=v_dot                            # Calculate Velocity
+
+            du = ephem.Cus*math.sin(2*phi) + ephem.cuc*math.cos(2*phi)
+            dr = ephem.crs*math.sin(2*phi) + ephem.crc*math.cos(2*phi)
+            di = ephem.Cis*math.sin(2*phi) + ephem.Cic*math.cos(2*phi)
+
+            du_dot=2*(ephem.Cus*math.cos(2*phi)-ephem.cuc*math.sin(2*phi))*phi_dot # Calculate Velocity
+            dr_dot=2*(ephem.crs*math.cos(2*phi)-ephem.crc*math.sin(2*phi))*phi_dot # Calculate Velocity
+            di_dot=2*(ephem.Cis*math.cos(2*phi)-ephem.Cic*math.sin(2*phi))*phi_dot # Calculate Velocity
+
+
+
+            u = phi + du
+            r = ephem.a*(1-ephem.e*math.cos(E)) + dr
+            i = ephem.i0 + di + ephem.i_dot*t
+
+            u_dot=phi_dot+du_dot#              % Calculate Velocity
+            r_dot=ephem.a*ephem.e*math.sin(E)*E_dot+dr_dot#  % Calculate Velocity
+            i_dot=ephem.i_dot+di_dot#                     % Calculate Velocity
+
+            xp = r*math.cos(u)
+            yp = r*math.sin(u)
+
+            xp_dot=r_dot*math.cos(u)-r*math.sin(u)*u_dot#          % Calculate Velocity
+            yp_dot=r_dot*math.sin(u)+r*math.cos(u)*u_dot#           % Calculate Velocity
+
+            omg = ephem.omg0 + (ephem.odot - odote)*t - odote*ephem.toe
+
+            omg_dot=ephem.OMEGA_dot - odote                 # % Calculate Velocity
+
+            obs.XS = xp*math.cos(omg) - yp*math.cos(i)*math.sin(omg)
+            obs.YS = xp*math.sin(omg) + yp*math.cos(i)*math.cos(omg)
+            obs.ZS = yp*math.sin(i)
+
+            obs.VXS= xp_dot*math.cos(omg)-yp_dot*math.cos(i)*math.sin(omg)+yp*math.sin(i)*math.sin(omg)*i_dot-obs.YS*omg_dot
+            obs.VYS= xp_dot*math.sin(omg)+yp_dot*math.cos(i)*math.cos(omg)-yp*math.sin(i)*i_dot*math.cos(omg)+obs.XS*omg_dot
+            obs.VZS= yp_dot*math.sin(i)+yp*math.cos(i)*i_dot
+
+            # compute the range
+            R = ((obs.ZS - rec_pos[0])**2 + (obs.ZS - rec_pos[1])**2 + (obs.ZS - rec_pos[2])**2)**0.5
+
+            obs.RANGE = R    #% range
+            tau=R/lightspeed;
+
+            #% Add earth rotation correction here
+            phi=-odote*tau;
+            l1 = np.matrix([[math.cos(phi),-math.sin(phi)],[math.sin(phi),math.cos(phi)]])
+            l2 = np.matrix([obs.XS,obs.YS])
+
+            corr= np.dot(l1,l2.T)
+            #print(corr[0,0])
+            obs.XS=corr[0,0]
+            obs.YS=corr[1,0]
+            #% update the range
+            R_new = ((obs.XS - rec_pos[0])**2 + (obs.YS - rec_pos[1])**2 + (obs.ZS - rec_pos[2])**2)**0.5
+            obs.RANGE = R_new    #% range
+            tau_new=R_new/lightspeed;
+
+            tsat = obs.gpsSeconds() - tau_new;
+            #print('tsat apos',tsat,tau_new)
+    def calculate_receiverPosition(self):
+        fL1 = 1575.42E6   # L1 frequency (Hz)
+        fL2 = 1227.6E6    # L2 frequency (Hz)
+        B=fL2**2/(fL2**2-fL1**2)
+        A=-B+1
+        for o in self.observations:
+            rec_xyz = self._aprox_position
+            for obs_data in o.data:
+                sat = SatOrbit()
+                sat.sat_number = obs_data.sat_number
+                sat.c1 = obs_data.c1
+                sat.l1 = obs_data.l1
+                sat.p2 = obs_data.p2
+                sat.l2 = obs_data.l2
+                sat.p3 = A*sat.c1+B*sat.p2
+                obs_data.sat = sat
+
+            for i in range(10):
+                for obs_data in o.data:
+                    self.get_broadcast_orbits(obs_data,rec_xyz)
+                    obs_data.clk = obs_data.satClkCorr
+                    obs_data.CorrP1 = obs_data.sat.p3 + obs_data.clk + obs_data.Rel
+                    #print('Sat! ',obs_data.sat_number)
+                    #print('Corrp1',obs_data.CorrP1)
+                    #print('P3',obs_data.sat.p3)
+                    #print('clk',obs_data.clk)
+                    #print('Rel',obs_data.Rel)
+
+
+                dxyz = self.delta_xyz(o,rec_xyz)
+                #print(o.gpsSeconds(),i,dxyz)
+                rec_xyz = rec_xyz + dxyz
+                rec_xyz = (rec_xyz[0,0],rec_xyz[0,1],rec_xyz[0,2])
+                #print('REC_XYZ',rec_xyz)
+                o.rec_xyz = rec_xyz
+    def delta_xyz(self,observation,aprox_pos):
         lista_spos = []
         lista_a = []
         lista_b =  []
         corrP1 = []
-        for gps in self.gps:
-
-            #print('gps',gps.sat_number,str(gps.epochHour),str(gps.epochMinute),str(gps.epochSecond),'diffTimeEphObs',gps.diffTimeEphObs)
-            gps_coord = gps.coordinate_WGS84()
-            lista_spos.append([gps_coord[0],gps_coord[1],gps_coord[2]])
-            corrP1.append(gps.CorrP1)
+        for obs_data in observation.data:
+            lista_spos.append([obs_data.XS,obs_data.YS,obs_data.ZS])
+            corrP1.append(obs_data.CorrP1)
             lista_b.append(0)
 
         matrix_b = np.matrix(lista_b)
 
         matrix_spos = np.matrix(lista_spos)
 
-        rec_xyz = np.matrix([self.aprox_pos[0],self.aprox_pos[1],self.aprox_pos[2]])
+        rec_xyz = np.matrix([aprox_pos[0],aprox_pos[1],aprox_pos[2]])
         #for j in range(10):
-        for i in range(len(self.gps)):
+        for i in range(len(observation.data)):
 
-            matrix_b[0,i] = (corrP1[i] - norm(matrix_spos[i] - rec_xyz[0] ,ord='fro'))
+            matrix_b[0,i] = (corrP1[i] - norm(matrix_spos[i] - rec_xyz ,ord='fro'))
+            #print('Corrp1',corrP1[i])
+            #print('matrix SPOPS',matrix_spos[i])
+            #print('recxyz',rec_xyz)
+
+            #print(matrix_b)
             lista_a.append([(-(matrix_spos[i,0] - rec_xyz[0,0])) / corrP1[i] ,
                             (-(matrix_spos[i,1] - rec_xyz[0,1])) / corrP1[i] ,
                             (-(matrix_spos[i,2] - rec_xyz[0,2])) / corrP1[i] ,
                             1 ])
         matrix_a = np.matrix(lista_a)
         delta_xyzb = np.linalg.lstsq(matrix_a,matrix_b.transpose())[0]
-        rec_xyz = rec_xyz - delta_xyzb[:-1].transpose()
-        lista_a = []
-        return  (rec_xyz[0,0],rec_xyz[0,1],rec_xyz[0,2])
-    def getCoordinates_(self):
-        if len(self.gps) <= 0:
-            return None
+        return delta_xyzb[:-1].transpose()
 
-        lista_X0 = [self.aprox_pos[0],self.aprox_pos[1],self.aprox_pos[2],0]
-        #lista_X0 = [0,0,0,0]
-        matrix_X0 = np.matrix(lista_X0).transpose()
 
-        for i in range(1):
-            lista_a = []
-            lista_L = []
 
-            for gps in self.gps:
+class Ephemeris:
+    def _gpsWeekSeconds(self):
+        return GPSUtils.gpsWeek_seconds(self.epochYear,self.epochMonth,self.epochDay,
+                                        self.epochHour,self.epochMinute,self.epochSecond)
+    def gpsWeek(self):
+        return self._gpsWeekSeconds()[0]
+    def toc(self):
+        return self._gpsWeekSeconds()[1]
+    def calculatePosition(self):
+        meu = 3.986005E14;         # earth's universal gravitational [m^3/s^2]
+        odote = 7.2921151467E-5;   # earth's rotation rate (rad/sec)
+        lightspeed = 2.99792458E8; # speed of light (m/s)
 
-                #print('gps',gps.sat_number,str(gps.epochHour),str(gps.epochMinute),str(gps.epochSecond),'diffTimeEphObs',gps.diffTimeEphObs)
-                gps_coord = gps.coordinate_WGS84()
-                #print(gps_coord)
-                denominator = ((lista_X0[0] - gps_coord[0])**2 + (lista_X0[1] - gps_coord[1])**2 + (lista_X0[2] - gps_coord[2])**2)**0.5
-                lista_a.append([(lista_X0[0] - gps_coord[0])/denominator,
-                                (lista_X0[1] - gps_coord[1])/denominator,
-                                (lista_X0[2] - gps_coord[2])/denominator,
-                                1])
-                lista_L.append(self.sat_pseudo[gps.sat_number])
-            matrix_L = np.matrix(lista_L).transpose()
-            matriz_a = np.matrix(lista_a)
-            matriz_aT = matriz_a.transpose()
-            matrix_deltaX = np.dot(inv(np.dot(matriz_aT,matriz_a)),
-                                    np.dot(matriz_aT,matrix_L))
+        F = -4.442807633E-10; # Constant, [sec/(meter)^(1/2)]
 
-            #matrix_deltaX[0][0] = 90
-            matrix_Xa = matrix_X0 + matrix_deltaX
+        tsat = self.toc()
+        #print('Sat #',obs.sat_number)
 
-            print('mariz deltaX',matrix_deltaX)
-            print('mariz X0',matrix_X0)
-            print('mariz Xa',matrix_Xa)
 
-            lista_X0 = [matrix_Xa.A[0][0],matrix_Xa.A[1][0],matrix_Xa.A[2][0],matrix_Xa.A[3][0]]
-            matrix_X0 = np.matrix(lista_X0).transpose()
-        return (matrix_Xa.A[0][0],matrix_Xa.A[1][0],matrix_Xa.A[2][0])
+
+        self.a = self.sqrtA **2
+        self.dn = self.delta_n
+        self.omg0 = self.OMEGA
+        self.odot = self.OMEGA_dot
+
+        n0 = (meu/self.a**3)**0.5
+        #print('n0',n0)
+        t = tsat-self.toe
+        n = n0 + self.dn
+        m = self.M0 + n*t
+        #print('M0 coisas',self.M0,n,t,tsat,self.toe)
+        m_dot=n #% Calculate Velocity
+        E = GPSUtils.kepOrb2E(m,self.e)
+        #print('E',E)
+
+        #Compute relativistic correction term
+        dtr = F * self.e * ((self.a)**0.5) * math.sin(E)
+        Rel = dtr*c
+
+        # Compute satellite clock correction
+        clkCorr= (self.af2 * (tsat-self.toc()) + self.af1) * (tsat-self.toc()) + self.af0
+        satClkCorr = clkCorr*c
+        #print('ClockCorr',obs.satClkCorr)
+        t = t - clkCorr;
+
+        E_dot=m_dot/(1-self.e*math.cos(E)) #Calculate Velocity
+
+
+        v = math.atan2(((1-self.e**2)**0.5)*math.sin(E),math.cos(E)-self.e)
+
+        v_dot=math.sin(E)*E_dot*(1+self.e*math.cos(v))/(math.sin(v)*(1-self.e*math.cos(E))) # Calculate Velocity
+
+
+        phi = v + self.omega
+
+        phi_dot=v_dot                            # Calculate Velocity
+
+        du = self.Cus*math.sin(2*phi) + self.cuc*math.cos(2*phi)
+        dr = self.crs*math.sin(2*phi) + self.crc*math.cos(2*phi)
+        di = self.Cis*math.sin(2*phi) + self.Cic*math.cos(2*phi)
+
+        du_dot=2*(self.Cus*math.cos(2*phi)-self.cuc*math.sin(2*phi))*phi_dot # Calculate Velocity
+        dr_dot=2*(self.crs*math.cos(2*phi)-self.crc*math.sin(2*phi))*phi_dot # Calculate Velocity
+        di_dot=2*(self.Cis*math.cos(2*phi)-self.Cic*math.sin(2*phi))*phi_dot # Calculate Velocity
+
+
+
+        u = phi + du
+        r = self.a*(1-self.e*math.cos(E)) + dr
+        i = self.i0 + di + self.i_dot*t
+
+        u_dot=phi_dot+du_dot#              % Calculate Velocity
+        r_dot=self.a*self.e*math.sin(E)*E_dot+dr_dot#  % Calculate Velocity
+        i_dot=self.i_dot+di_dot#                     % Calculate Velocity
+
+        xp = r*math.cos(u)
+        yp = r*math.sin(u)
+
+        xp_dot=r_dot*math.cos(u)-r*math.sin(u)*u_dot#          % Calculate Velocity
+        yp_dot=r_dot*math.sin(u)+r*math.cos(u)*u_dot#           % Calculate Velocity
+
+        omg = self.omg0 + (self.odot - odote)*t - odote*self.toe
+
+        omg_dot=self.OMEGA_dot - odote                 # % Calculate Velocity
+
+        XS = xp*math.cos(omg) - yp*math.cos(i)*math.sin(omg)
+        YS = xp*math.sin(omg) + yp*math.cos(i)*math.cos(omg)
+        ZS = yp*math.sin(i)
+        return (XS,YS,ZS)
+class Observation:
+    def __init__(self):
+        self.sat_number = 0
+        self.epochYear = 0
+        self.epochMonth = 0
+        self.epochDay = 0
+        self.epochHour = 0
+        self.epochMinute = 0
+        self.epochSecond = 0
+        self.data = []
+
+    def getStrDate(self):
+        stringEpoch = ('00'+str(self.epochYear))[-2:] + ' '+ str(self.epochMonth) + ' ' + str(self.epochDay) + ' '+ str(self.epochHour) + ' ' + str(self.epochMinute) + ' ' + str(self.epochSecond)
+        d = datetime.strptime(stringEpoch,'%y %m %d %H %M %S')
+        return d.__str__()
+    def _gpsWeekSeconds(self):
+        return GPSUtils.gpsWeek_seconds(self.epochYear,self.epochMonth,self.epochDay,
+                                        self.epochHour,self.epochMinute,self.epochSecond)
+    def gpsWeek(self):
+        return self._gpsWeekSeconds()[0]
+    def gpsSeconds(self):
+        return self._gpsWeekSeconds()[1]
+
+class ObsData:
+    def __init__(self):
+        self.sat_number = 0
+        self.epochYear = 0
+        self.epochMonth = 0
+        self.epochDay = 0
+        self.epochHour = 0
+        self.epochMinute = 0
+        self.epochSecond = 0
+        self.c1 = 0
+        self.l1 = 0
+        self.p2 = 0
+        self.l2 = 0
+    def _gpsWeekSeconds(self):
+        return GPSUtils.gpsWeek_seconds(self.epochYear,self.epochMonth,self.epochDay,
+                                        self.epochHour,self.epochMinute,self.epochSecond)
+    def gpsWeek(self):
+        return self._gpsWeekSeconds()[0]
+    def gpsSeconds(self):
+        return self._gpsWeekSeconds()[1]
+    def __repr__(self):
+        return self.__str__()
+    def __str__(self):
+        return str(self.sat_number) +' '+ str(self.epochYear) +' '+ str(self.epochMonth) +' '+ str(self.epochDay) +' '+ str(self.epochHour) +' '+ str(self.epochMinute) +' '+ str(self.epochSecond) +' '+ str(self.c1) +' '+ str(self.l1) +' '+ str(self.p2) +' '+ str(self.l2)
+
+
+
+
+
+
+
+
+
+
 
 
 """Classe responsavel por criar instancias de GpsMessageFile de acordo com o Layout Rinex 2 ou Rinex 3"""
 class GPSFactory:
-    def createReceptorFromRinexFile(fileBlock, aprox_pos, sat_pseudo, version):
+    def createObservationFromRinexFile(fileBlock, version):
         if version == 2:
-            g = GPSFactory._receptorFromRinex2(fileBlock, aprox_pos, sat_pseudo)
+            g = GPSFactory._observationFromRinex2(fileBlock)
         return g
-    def _receptorFromRinex2(fileBlock,aprox_pos, sat_pseudo):
+    def _observationFromRinex2(fileBlock):
+        epochYear = int(fileBlock[0][0:3])
+        epochMonth = int(fileBlock[0][4:6])
+        epochDay = int(fileBlock[0][8:10])
+        epochHour = int(fileBlock[0][10:12])
+        epochMinute = int(fileBlock[0][13:15])
+        epochSecond = int(round(float(fileBlock[0][16:26]),0))
 
-        fL1 = 1575.42E6   # L1 frequency (Hz)
-        fL2 = 1227.6E6    # L2 frequency (Hz)
-        B=fL2**2/(fL2**2-fL1**2)
-        A=-B+1;
-
-
-        r = GPSReceptor()
-        r.aprox_pos = aprox_pos
-        r.sat_number = []
-        r.gps = []
-        r.sat_pseudo = sat_pseudo
-        r.sat_obs_data = {}
         auxString = fileBlock[0][31:].strip()
         auxSats = auxString.split('G')
-        for i in range(1,len(auxSats)):
-            r.sat_number.append(auxSats[i].strip())
-            c1 = float(fileBlock[i][2:14].strip())
-            l1 = float(fileBlock[i][17:32].strip())
-            p2 = float(fileBlock[i][34:46].strip())
-            l2 = float(fileBlock[i][50:].strip())
+        o = Observation()
+        o.epochYear = epochYear
+        o.epochMonth = epochMonth
+        o.epochDay = epochDay
+        o.epochHour = epochHour
+        o.epochMinute = epochMinute
+        o.epochSecond = epochSecond
 
-            p3=A*c1+B*p2
+        for j in range(1,len(auxSats)):
+            obs = ObsData()
+            obs.epochYear = epochYear
+            obs.epochMonth = epochMonth
+            obs.epochDay = epochDay
+            obs.epochHour = epochHour
+            obs.epochMinute = epochMinute
+            obs.epochSecond = epochSecond
 
 
-            r.sat_obs_data[auxSats[i].strip()] = {'C1':c1,'L1':l1,'P2':p2,'L2':l2,'P3':p3}
-        print(r.sat_obs_data)
-        r.epochYear = int(fileBlock[0][0:3])
-        r.epochMonth = int(fileBlock[0][4:6])
-        r.epochDay = int(fileBlock[0][8:10])
-        r.epochHour = int(fileBlock[0][10:12])
-        r.epochMinute = int(fileBlock[0][13:15])
-        r.epochSecond = int(round(float(fileBlock[0][16:26]),0))
-        return r
+            obs.sat_number = int(auxSats[j].strip())
+            obs.c1 = float(fileBlock[j][2:14].strip())
+            obs.l1 = float(fileBlock[j][17:32].strip()) * LAMBDA_L1
+            obs.p2 = float(fileBlock[j][34:46].strip())
+            obs.l2 = float(fileBlock[j][50:].strip())
+            o.data.append(obs)
+        return o
 
-    def createGPSFromRinexFile(fileBlock, version):
+    def createEphemerisFromRinexFile(fileBlock, version):
         if version == 2:
-            g = GPSFactory._gpsFromRinex2(fileBlock)
+            g = GPSFactory._ephemerisFromRinex2(fileBlock)
         else:
-            g = GPSFactory._gpsFromRinex3(fileBlock)
+            g = GPSFactory._ephemerisFromRinex3(fileBlock)
         return g
-    def _gpsFromRinex2(fileBlock):
-        g = GpsMessageFile()
+    def _ephemerisFromRinex2(fileBlock):
+        g = Ephemeris()
         #first line
-        g.sat_number = fileBlock[0][0:3].strip()
+        g.sat_number = int(fileBlock[0][0:3].strip())
         g.epochYear = int(fileBlock[0][3:5])
         g.epochMonth = int(fileBlock[0][6:8])
         g.epochDay = int(fileBlock[0][9:11])
         g.epochHour = int(fileBlock[0][12:14])
         g.epochMinute = int(fileBlock[0][15:17])
         g.epochSecond = int(round(float(fileBlock[0][18:22]),0))
-        g.sv_clock_bias = float(fileBlock[0][22:41])
-        g.sv_clock_drift = float(fileBlock[0][41:60])
-        g.sv_clock_drift_rate = float(fileBlock[0][60:79])
+        g.af0 = float(fileBlock[0][22:41])
+        g.af1 = float(fileBlock[0][41:60])
+        g.af2 = float(fileBlock[0][60:79])
 
         #second line
-        g.iode = float(fileBlock[1][0:22])
+        g.IODE = float(fileBlock[1][0:22])
         g.crs = float(fileBlock[1][22:41])
-        g.deltaN = float(fileBlock[1][41:60])
-        g.m0 = float(fileBlock[1][60:79])
+        g.delta_n = float(fileBlock[1][41:60])
+        g.M0 = float(fileBlock[1][60:79])
 
         #third line
         g.cuc = float(fileBlock[2][0:22])
-        g.eccentricity = float(fileBlock[2][22:41])
-        g.cus = float(fileBlock[2][41:60])
+        g.e = float(fileBlock[2][22:41])
+        g.Cus = float(fileBlock[2][41:60])
         g.sqrtA = float(fileBlock[2][60:79])
 
         #fourth line
-        g.toeTime = float(fileBlock[3][0:22])
-        g.cic = float(fileBlock[3][22:41])
-        g.omega0 = float(fileBlock[3][41:60])
-        g.cis = float(fileBlock[3][60:79])
+        g.toe = float(fileBlock[3][0:22])
+        g.Cic = float(fileBlock[3][22:41])
+        g.OMEGA = float(fileBlock[3][41:60])
+        g.Cis = float(fileBlock[3][60:79])
 
         #fifth line
         g.i0 = float(fileBlock[4][0:22])
         g.crc = float(fileBlock[4][22:41])
         g.omega = float(fileBlock[4][41:60])
-        g.omegaDot = float(fileBlock[4][60:79])
+        g.OMEGA_dot = float(fileBlock[4][60:79])
 
         #sixth line
-        g.idot = float(fileBlock[5][0:22])
-        g.codesL2Channel = float(fileBlock[5][22:41])
-        g.gpsWeek = float(fileBlock[5][41:60])
-        g.l2PDataFlag = float(fileBlock[5][60:79])
+        g.i_dot = float(fileBlock[5][0:22])
+        g.L2_codes = float(fileBlock[5][22:41])
+        g.GPS_wk = float(fileBlock[5][41:60])
+        g.l2_dataflag = float(fileBlock[5][60:79])
 
         #seventh line
-        g.svAccuracy = float(fileBlock[6][0:22])
-        g.svHealth = float(fileBlock[6][22:41])
-        g.tgd = float(fileBlock[6][41:60])
-        g.iodc = float(fileBlock[6][60:79])
+        g.SV_Acc = float(fileBlock[6][0:22])
+        g.SV_health = float(fileBlock[6][22:41])
+        g.TGD = float(fileBlock[6][41:60])
+        g.IODC = float(fileBlock[6][60:79])
 
         #eight Line
         g.transTime = float(fileBlock[7][0:22])
-        #self.fitInterval = float(fileBlock[7][22:41])
         return g
-
-    def _gpsFromRinex3(fileBlock):
-        g = GpsMessageFile()
+    def _ephemerisFromRinex3(fileBlock):
+        g = Ephemeris()
         #first line
         g.sat_number = fileBlock[0][0:3].strip()
         g.epochYear = int(fileBlock[0][4:8])
@@ -466,45 +604,45 @@ class GPSFactory:
         g.epochHour = int(fileBlock[0][15:17])
         g.epochMinute = int(fileBlock[0][18:20])
         g.epochSecond = int(fileBlock[0][21:23])
-        g.sv_clock_bias = float(fileBlock[0][24:42])
-        g.sv_clock_drift = float(fileBlock[0][43:61])
-        g.sv_clock_drift_rate = float(fileBlock[0][62:80])
+        g.af0 = float(fileBlock[0][24:42])
+        g.af1 = float(fileBlock[0][43:61])
+        g.af2 = float(fileBlock[0][62:80])
 
         #second line
-        g.iode = float(fileBlock[1][0:23])
+        g.IODE = float(fileBlock[1][0:23])
         g.crs = float(fileBlock[1][23:42])
-        g.deltaN = float(fileBlock[1][42:61])
-        g.m0 = float(fileBlock[1][61:80])
+        g.delta_n = float(fileBlock[1][42:61])
+        g.M0 = float(fileBlock[1][61:80])
 
         #third line
         g.cuc = float(fileBlock[2][0:23])
-        g.eccentricity = float(fileBlock[2][23:42])
-        g.cus = float(fileBlock[2][42:61])
+        g.e = float(fileBlock[2][23:42])
+        g.Cus = float(fileBlock[2][42:61])
         g.sqrtA = float(fileBlock[2][61:80])
 
         #fourth line
-        g.toeTime = float(fileBlock[3][0:23])
-        g.cic = float(fileBlock[3][23:42])
-        g.omega0 = float(fileBlock[3][42:61])
-        g.cis = float(fileBlock[3][61:80])
+        g.toe = float(fileBlock[3][0:23])
+        g.Cic = float(fileBlock[3][23:42])
+        g.OMEGA = float(fileBlock[3][42:61])
+        g.Cis = float(fileBlock[3][61:80])
 
         #fifth line
         g.i0 = float(fileBlock[4][0:23])
         g.crc = float(fileBlock[4][23:42])
         g.omega = float(fileBlock[4][42:61])
-        g.omegaDot = float(fileBlock[4][61:80])
+        g.OMEGA_dot = float(fileBlock[4][61:80])
 
         #sixth line
-        g.idot = float(fileBlock[5][0:23])
-        g.codesL2Channel = float(fileBlock[5][23:42])
-        g.gpsWeek = float(fileBlock[5][42:61])
-        g.l2PDataFlag = float(fileBlock[5][61:80])
+        g.i_dot = float(fileBlock[5][0:23])
+        g.L2_codes = float(fileBlock[5][23:42])
+        g.GPS_wk = float(fileBlock[5][42:61])
+        g.l2_dataflag = float(fileBlock[5][61:80])
 
         #seventh line
-        g.svAccuracy = float(fileBlock[6][0:23])
-        g.svHealth = float(fileBlock[6][23:42])
-        g.tgd = float(fileBlock[6][42:61])
-        g.iodc = float(fileBlock[6][61:80])
+        g.SV_Acc = float(fileBlock[6][0:23])
+        g.SV_health = float(fileBlock[6][23:42])
+        g.TGD = float(fileBlock[6][42:61])
+        g.IODC = float(fileBlock[6][61:80])
 
         #eight Line
         g.transTime = float(fileBlock[7][0:23])
