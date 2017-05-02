@@ -5,44 +5,57 @@
     <meta charset="UTF-8">
     <link href="static/css/bootstrap.min.css" rel="stylesheet">
     <link href="static/css/bootstrap-theme.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Josefin+Sans" rel="stylesheet">
+    <style>
+      .navbar-brand{
+        font-family: 'Josefin Sans' !important;
+      }
+      .navbar-static-bottom {
+        @extend .navbar-fixed-bottom;
+        position: relative;
+        border-width: 1px 1px 0;
+      }
+
+    </style>
 
   </head>
   <body>
-    <nav class="navbar navbar-inverse navbar-static-top">
+    <nav class="navbar navbar-static-top" style="background-color:black;">
       <div class="container">
         <div class="navbar-header">
-          <div class="navbar-brand" href="#">Posicionamento Via GPS</div>
+
+          <div class="navbar-brand" href="#" style="color:white" ><i class="glyphicon glyphicon-globe"></i> POSICIONAMENTO VIA GPS</div>
         </div>
       </div>
     </nav>
     <div class="container" role="main">
       <div class="row">
 
-      <form action="{{url_for('files')}}" method="post" enctype="multipart/form-data">
-        <div class="input-group" style="margin:10px">
-            <label class="input-group-btn">
-              <span class="btn btn-primary" style="width:148px">
-                Navigation File&hellip; <input type="file" name="nav_file" style="display: none;">
-              </span>
-            </label>
-            <input type="text" class="form-control" readonly>
-        </div>
+        <form action="{{url_for('files')}}" method="post" enctype="multipart/form-data">
+          <div class="input-group" style="margin:10px">
+              <label class="input-group-btn">
+                <span class="btn btn-primary" style="width:148px">
+                  Navigation File&hellip; <input type="file" name="nav_file" style="display: none;">
+                </span>
+              </label>
+              <input type="text" class="form-control" readonly>
+          </div>
 
-        <div class="input-group" style="margin-left:10px;margin-right:10px;margin-bottom:10px">
-            <label class="input-group-btn">
-              <span class="btn btn-primary" style="width:148px">
-                Observation Data&hellip; <input type="file" name="obs_file" style="display: none;">
-              </span>
-            </label>
-            <input type="text" class="form-control" readonly>
-        </div>
+          <div class="input-group" style="margin-left:10px;margin-right:10px;margin-bottom:10px">
+              <label class="input-group-btn">
+                <span class="btn btn-primary" style="width:148px">
+                  Observation Data&hellip; <input type="file" name="obs_file" style="display: none;">
+                </span>
+              </label>
+              <input type="text" class="form-control" readonly>
+          </div>
 
-        <div class="input-group" style="width:350px;margin-left:10px;margin-right:10px;margin-bottom:10px">
-          <span class="input-group-addon">Number of Observations to Process</span>
-          <input id="maxobs" name="maxobs" type="number" class="form-control" value="20">
-        </div>
-        <button type="submit" class="btn btn-primary" style="margin-left:10px">Enviar</button>
-      </form>
+          <div class="input-group" style="width:350px;margin-left:10px;margin-right:10px;margin-bottom:10px">
+            <span class="input-group-addon">Number of Observations to Process</span>
+            <input id="maxobs" name="maxobs" type="number" class="form-control" value="20">
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-left:10px">Enviar</button>
+        </form>
       </div>
 
       {% if receptor %}
@@ -98,73 +111,88 @@
       </div>
 
 
-    <div class="row" id="sat_values">
-      {% if listaGPS %}
-      <div class="page-header">
-        <h1 style="display:inline-block">Navigation Data</h1>
-        <div class='button' style="display:inline-block">
-            <a href="#" id ="export" role='button'><i class="glyphicon glyphicon-save-file"></i></a>
+      <div class="row" id="sat_values">
+        {% if listaGPS %}
+        <div class="page-header">
+          <h1 style="display:inline-block">Navigation Data</h1>
+          <div class='button' style="display:inline-block">
+              <a href="#" id ="export" role='button'><i class="glyphicon glyphicon-save-file"></i></a>
+          </div>
         </div>
+        <table class="table table-hover table-condensed" style="margin:10px">
+
+          <thead>
+          <tr class="exp_data" >
+            <th class="exp_data" >#</th>
+            <th class="exp_data" >Sat#</th>
+            <th class="exp_data" >Epoch</th>
+            <th class="exp_data" >WGS84 Coordinates</th>
+            <th>
+
+            </th>
+          </tr>
+          </thead>
+
+
+        {% for gps in listaGPS %}
+          <tr class="exp_data">
+            <td class="exp_data" >
+              {{ loop.index}}
+            </td>
+            <td class="exp_data" >
+              {{ gps.sat_number }}
+            </td>
+            <td class="exp_data" >
+              {{ gps.epochYear }} {{gps.epochMonth}} {{gps.epochDay}} {{gps.epochHour}} {{gps.epochMinute}} {{gps.epochSecond}}
+            </td>
+            <td class="exp_data" >
+              {{ gps.calculatePosition() }}
+            </td>
+            <td>
+              <button type="button" class="view-button btn btn-link btn-xs">
+                <span class="glyphicon glyphicon-info-sign"></span>  Details
+              </button>
+            </td>
+          </tr>
+          <tr style="display:none;">
+            <td></td>
+            <td colspan="4">
+              <p><b>Data from Ephemeris File</b></p>
+              <p><b>Poly Clock Bias:</b> {{ gps.af0 }}    <b>Poly Clock Drift:</b> {{ gps.af1 }}    <b>Poly Drift Rate:</b> {{ gps.af2 }}    <b>iode:</b> {{ gps.IODE }}</p>
+              <p><b>CRS:</b> {{ gps.crs }}    <b>Delta N:</b> {{ gps.delta_n }}    <b>M0:</b> {{ gps.M0 }}    <b>Cuc:</b> {{ gps.cuc }}</p>
+              <p><b>Eccentricity:</b> {{ gps.e }}    <b>CUS:</b> {{ gps.Cus }}    <b>Sqrt A:</b> {{ gps.sqrtA }}    <b>Toe Time:</b> {{ gps.toe }}</p>
+              <p><b>CIC:</b> {{ gps.Cic }}    <b>Omega 0:</b> {{ gps.OMEGA }}    <b>Cis:</b> {{ gps.Cis }}    <b>i0:</b> {{ gps.i0 }}</p>
+              <p><b>CRC:</b> {{ gps.crc }}    <b>Omega:</b> {{ gps.omega }}    <b>Omega Dot:</b> {{ gps.OMEGA_dot }}    <b>i dot:</b> {{ gps.i_dot }}</p>
+              <p><b>Codes L2:</b> {{ gps.L2_codes }}     <b>GPS Week:</b> {{ gps.GPS_wk }}    <b>L2 Data Flag:</b> {{ gps.l2_dataflag }}    <b>SV Accuracy:</b> {{ gps.SV_Acc }}</p>
+              <p><b>Sv Health:</b> {{ gps.SV_health }}    <b>TGD:</b> {{ gps.TGD }}    <b>Iodc:</b> {{ gps.IODC }}    <b>Trans Time:</b> {{ gps.transTime }}</p>
+
+            </td>
+          </tr>
+        {% endfor %}
+
+        </table>
+
+
+
+        {% endif %}
+
+
       </div>
-      <table class="table table-hover table-condensed" style="margin:10px">
 
-        <thead>
-        <tr class="exp_data" >
-          <th class="exp_data" >#</th>
-          <th class="exp_data" >Sat#</th>
-          <th class="exp_data" >Epoch</th>
-          <th class="exp_data" >WGS84 Coordinates</th>
-          <th>
+      <br/>
 
-          </th>
-        </tr>
-        </thead>
-
-
-      {% for gps in listaGPS %}
-        <tr class="exp_data">
-          <td class="exp_data" >
-            {{ loop.index}}
-          </td>
-          <td class="exp_data" >
-            {{ gps.sat_number }}
-          </td>
-          <td class="exp_data" >
-            {{ gps.epochYear }} {{gps.epochMonth}} {{gps.epochDay}} {{gps.epochHour}} {{gps.epochMinute}} {{gps.epochSecond}}
-          </td>
-          <td class="exp_data" >
-            {{ gps.calculatePosition() }}
-          </td>
-          <td>
-            <button type="button" class="view-button btn btn-link btn-xs">
-              <span class="glyphicon glyphicon-info-sign"></span>  Details
-            </button>
-          </td>
-        </tr>
-        <tr style="display:none;">
-          <td></td>
-          <td colspan="4">
-            <p><b>Data from Ephemeris File</b></p>
-            <p><b>Poly Clock Bias:</b> {{ gps.af0 }}    <b>Poly Clock Drift:</b> {{ gps.af1 }}    <b>Poly Drift Rate:</b> {{ gps.af2 }}    <b>iode:</b> {{ gps.IODE }}</p>
-            <p><b>CRS:</b> {{ gps.crs }}    <b>Delta N:</b> {{ gps.delta_n }}    <b>M0:</b> {{ gps.M0 }}    <b>Cuc:</b> {{ gps.cuc }}</p>
-            <p><b>Eccentricity:</b> {{ gps.e }}    <b>CUS:</b> {{ gps.Cus }}    <b>Sqrt A:</b> {{ gps.sqrtA }}    <b>Toe Time:</b> {{ gps.toe }}</p>
-            <p><b>CIC:</b> {{ gps.Cic }}    <b>Omega 0:</b> {{ gps.OMEGA }}    <b>Cis:</b> {{ gps.Cis }}    <b>i0:</b> {{ gps.i0 }}</p>
-            <p><b>CRC:</b> {{ gps.crc }}    <b>Omega:</b> {{ gps.omega }}    <b>Omega Dot:</b> {{ gps.OMEGA_dot }}    <b>i dot:</b> {{ gps.i_dot }}</p>
-            <p><b>Codes L2:</b> {{ gps.L2_codes }}     <b>GPS Week:</b> {{ gps.GPS_wk }}    <b>L2 Data Flag:</b> {{ gps.l2_dataflag }}    <b>SV Accuracy:</b> {{ gps.SV_Acc }}</p>
-            <p><b>Sv Health:</b> {{ gps.SV_health }}    <b>TGD:</b> {{ gps.TGD }}    <b>Iodc:</b> {{ gps.IODC }}    <b>Trans Time:</b> {{ gps.transTime }}</p>
-
-          </td>
-        </tr>
-      {% endfor %}
-
-      </table>
-
-
-
-      {% endif %}
-
-
-    </div>
+      <footer class="footer navbar-static-bottom text-right">
+        <div class="container">
+          <hr/>
+          <h5>
+            <a href="https://github.com/lucaskup/PositionFromGPS" target="_blank" aria-label="Homepage" class="site-footer-mark" title="GitHub">
+                Lucas Kupssinskü
+                <svg aria-hidden="true" class="octicon octicon-mark-github" height="24" version="1.1" viewBox="0 0 16 16" width="24"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg>
+            </a>
+          </h5>
+          <br/>
+      </div>
+      </footer>
 
     </div>
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
