@@ -17,7 +17,7 @@ L5 = 1176.45E6
 LAMBDA_L1 = c / L1     #----> Wavelengths in meters.
 LAMBDA_L2 = c / L2
 LAMBDA_L5 = c / L5
-
+dicTypeObs = {}
 
 class RinexFileReader:
     def readFromObservation(self,fileName,ephem,max_obs):
@@ -37,11 +37,18 @@ class RinexFileReader:
                 _aprox_position = (float(dist[0]),float(dist[1]),float(dist[2]))
             #Detecta o fim do header do arquivo para possibilitar a importação dos dados
             #dos GPSs
+            if content[i][-21:].strip() == '# / TYPES OF OBSERV':
+                strAuxPosicoes = content[i][:50].strip().split('    ')
+                typesPossiblePos = [(-15,-1),(50,66),(34,46), (17,32),(2,14)]
+                for typeObs in strAuxPosicoes:
+                    if typeObs == 'C1' or typeObs == 'L1' or typeObs == 'P2' or typeObs == 'L2':
+                        dicTypeObs[typeObs] = typesPossiblePos.pop()
+
             if 'END OF HEADER' in content[i]:
                 endOfHeaderLineNumber = i
                 #print('detectou header',str(i))
                 break
-
+        #print('version', str(_version))
         if _version == 2:
             total_lines = len(content) - endOfHeaderLineNumber - 1
             lines_visited = 0
@@ -51,8 +58,11 @@ class RinexFileReader:
                 lines_visited += linhas_pular+1
                 for i in range(len(fileBlock)):
                     fileBlock[i] = fileBlock[i].replace('D', 'E')
+                #print(fileBlock)
                 if _version == 2:
+
                     o = GPSFactory.createObservationFromRinexFile(fileBlock,_version)
+                    #print(o)
                     lista_obs.append(o)
                     if max_obs == 1:
                         break
@@ -63,8 +73,11 @@ class RinexFileReader:
             lista_obs = None
         r = Receiver()
         r.observations = lista_obs
+
         r._aprox_position = _aprox_position
         r.ephemeris = ephem
+        #print('eph',str(len(r.ephemeris)))
+        #print('obs',str(len(r.observations)))
         return r
 
     def readFromEphemeris(self,fileName):
@@ -169,6 +182,7 @@ class Receiver:
         self._aprox_position = (0,0,0)
 
     def get_broadcast_orbits(self,obs,rec_pos):
+        #print('Get Broadcast orbits')
         meu = 3.986005E14;         # earth's universal gravitational [m^3/s^2]
         odote = 7.2921151467E-5;   # earth's rotation rate (rad/sec)
         lightspeed = 2.99792458E8; # speed of light (m/s)
@@ -176,7 +190,7 @@ class Receiver:
         F = -4.442807633E-10; # Constant, [sec/(meter)^(1/2)]
 
         tsat = obs.gpsSeconds()
-        #print('Sat #',obs.sat_number)
+        print('Sat #',obs.sat_number)
         for j in range(4):
             lista = self.ephemeris[obs.sat_number]
             lista = sorted(lista,key=lambda e: abs(tsat - e.gpsWeek()))
@@ -187,14 +201,14 @@ class Receiver:
             ephem.odot = ephem.OMEGA_dot
 
             n0 = (meu/ephem.a**3)**0.5
-            #print('n0',n0)
+            print('n0',n0)
             t = tsat-ephem.toe
             n = n0 + ephem.dn
             m = ephem.M0 + n*t
-            #print('M0 coisas',ephem.M0,n,t,tsat,ephem.toe)
+            print('M0 coisas',ephem.M0,n,t,tsat,ephem.toe)
             m_dot=n #% Calculate Velocity
             E = GPSUtils.kepOrb2E(m,ephem.e)
-            #print('E',E)
+            print('E',E)
 
             #Compute relativistic correction term
             dtr = F * ephem.e * ((ephem.a)**0.5) * math.sin(E)
@@ -203,7 +217,7 @@ class Receiver:
             # Compute satellite clock correction
             clkCorr= (ephem.af2 * (tsat-ephem.toc()) + ephem.af1) * (tsat-ephem.toc()) + ephem.af0
             obs.satClkCorr = clkCorr*c
-            #print('ClockCorr',obs.satClkCorr)
+            print('ClockCorr',obs.satClkCorr)
             t = t - clkCorr;
 
             E_dot=m_dot/(1-ephem.e*math.cos(E)) #Calculate Velocity
@@ -277,13 +291,17 @@ class Receiver:
             tsat = obs.gpsSeconds() - tau_new;
             #print('tsat apos',tsat,tau_new)
     def calculate_receiverPosition(self):
+        #print('Calculate Receiver')
         fL1 = 1575.42E6   # L1 frequency (Hz)
         fL2 = 1227.6E6    # L2 frequency (Hz)
         B=fL2**2/(fL2**2-fL1**2)
         A=-B+1
         for o in self.observations:
+
             rec_xyz = self._aprox_position
+            #print('observations',str(rec_xyz))
             for obs_data in o.data:
+                #print('for obs data',obs_data.sat_number )
                 sat = SatOrbit()
                 sat.sat_number = obs_data.sat_number
                 sat.c1 = obs_data.c1
@@ -291,6 +309,7 @@ class Receiver:
                 sat.p2 = obs_data.p2
                 sat.l2 = obs_data.l2
                 sat.p3 = A*sat.c1+B*sat.p2
+                print('sat number',str(sat.sat_number),'c1',str(sat.c1),'p2',str(sat.p2),'p3',str(sat.p3))
                 obs_data.sat = sat
 
             for i in range(10):
@@ -312,11 +331,13 @@ class Receiver:
                 #print('REC_XYZ',rec_xyz)
                 o.rec_xyz = rec_xyz
     def delta_xyz(self,observation,aprox_pos):
+        #print('delta xyz')
         lista_spos = []
         lista_a = []
         lista_b =  []
         corrP1 = []
         for obs_data in observation.data:
+            #print('delta obs data',str(obs_data.XS),str(obs_data.YS),str(obs_data.ZS))
             lista_spos.append([obs_data.XS,obs_data.YS,obs_data.ZS])
             corrP1.append(obs_data.CorrP1)
             lista_b.append(0)
@@ -502,13 +523,18 @@ class GPSFactory:
     def _observationFromRinex2(fileBlock):
         epochYear = int(fileBlock[0][0:3])
         epochMonth = int(fileBlock[0][4:6])
-        epochDay = int(fileBlock[0][8:10])
+        epochDay = int(fileBlock[0][7:9])
         epochHour = int(fileBlock[0][10:12])
         epochMinute = int(fileBlock[0][13:15])
         epochSecond = int(round(float(fileBlock[0][16:26]),0))
 
         auxString = fileBlock[0][31:].strip()
-        auxSats = auxString.split('G')
+        if 'G' in auxString:
+            auxSats = auxString.split('G')
+        else:
+            auxString2 = auxString.replace('  ',' ')
+            auxSats = auxString2.split(' ')
+        #print('auxsats',auxSats)
         o = Observation()
         o.epochYear = epochYear
         o.epochMonth = epochMonth
@@ -526,13 +552,21 @@ class GPSFactory:
             obs.epochMinute = epochMinute
             obs.epochSecond = epochSecond
 
+            try:
+                obs.sat_number = int(auxSats[j].strip())
 
-            obs.sat_number = int(auxSats[j].strip())
-            obs.c1 = float(fileBlock[j][2:14].strip())
-            obs.l1 = float(fileBlock[j][17:32].strip()) * LAMBDA_L1
-            obs.p2 = float(fileBlock[j][34:46].strip())
-            obs.l2 = float(fileBlock[j][50:].strip())
-            o.data.append(obs)
+                obs.c1 = float(fileBlock[j][dicTypeObs['C1'][0]:dicTypeObs['C1'][1]].strip())
+                obs.l1 = float(fileBlock[j][dicTypeObs['L1'][0]:dicTypeObs['L1'][1]].strip()) * LAMBDA_L1
+                obs.p2 = float(fileBlock[j][dicTypeObs['P2'][0]:dicTypeObs['P2'][1]].strip())
+                obs.l2 = float(fileBlock[j][dicTypeObs['L2'][0]:dicTypeObs['L2'][1]].strip())
+                #obs.c1 = float(fileBlock[j][2:14].strip())
+                #obs.l1 = float(fileBlock[j][17:32].strip()) * LAMBDA_L1
+                #obs.p2 = float(fileBlock[j][34:46].strip())
+                #obs.l2 = float(fileBlock[j][50:66].strip())
+                o.data.append(obs)
+            except:
+                pass
+
         return o
 
     def createEphemerisFromRinexFile(fileBlock, version):
