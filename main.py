@@ -19,7 +19,7 @@ def index():
 
 @app.route('/map',methods = ['GET'])
 def show_map():
-    return render_template('map.html')
+    return render_template('mapa.html')
 
 @app.route('/files',methods = ['POST'])
 def files():
@@ -89,7 +89,7 @@ def salvaMapa(listaMarcadores):
                 fg.add_child(folium.Marker(location=[lat,lon],popup=sat,icon = folium.Icon(color='green')))
         #map.simple_marker(location=[45.3311,-121.7311],popup='Timberlake Lodge', marker_color='green')
         map.add_child(fg)
-        map.save(outfile='templates/map.html')
+        map.save(outfile='templates/mapa.html')
 
 if __name__=='__main__':
     app.run(debug=True)
