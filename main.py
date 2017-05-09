@@ -56,8 +56,9 @@ def files():
             os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
 
-            salvaMapa(converteLatLong(receptor))
-
+            #salvaMapa(converteLatLong(receptor))
+            listaLatLong = converteLatLong(receptor)
+            #print(listaLatLong)
             listaGPS = []
             for sat in lista:
                 for ephem in lista[sat]:
@@ -67,7 +68,7 @@ def files():
             #print(receptores[55].getCoordinates())
             #print('Verificou')
         #print(lista[0].coordinate_WGS84())
-    return render_template('index.html',listaGPS = listaGPS, receptor = receptor)
+    return render_template('index.html',listaGPS = listaGPS, receptor = receptor,listaLatLong = listaLatLong)
 
 def converteLatLong(receptor):
     listaLatLong = []
@@ -78,18 +79,6 @@ def converteLatLong(receptor):
         lon, lat, alt = pyproj.transform(ecef, lla, x, y, z, radians=False)
         listaLatLong.append((str(obs.gpsSeconds()),lat,lon,alt))
     return listaLatLong
-
-
-def salvaMapa(listaMarcadores):
-    if(len(listaMarcadores)>0):
-        map = folium.Map(location=[listaMarcadores[0][1],listaMarcadores[0][2]],zoom_start=16, tiles = 'openstreetmap')
-
-        fg = folium.FeatureGroup(name='Receptor')
-        for sat,lat,lon,alt in listaMarcadores:
-                fg.add_child(folium.Marker(location=[lat,lon],popup=sat,icon = folium.Icon(color='green')))
-        #map.simple_marker(location=[45.3311,-121.7311],popup='Timberlake Lodge', marker_color='green')
-        map.add_child(fg)
-        map.save(outfile='templates/mapa.html')
 
 if __name__=='__main__':
     app.run(debug=True)

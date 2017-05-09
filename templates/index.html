@@ -7,7 +7,18 @@
     <link href="static/css/bootstrap-theme.min.css" rel="stylesheet">
     <link href="static/css/estilos_person.css" rel="stylesheet">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
-
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAP2pPf68pBw1SuQ0Hju-thJBTW_msjVj4&callback=initMap">
+    </script>
+    <style>
+      #map {
+        width: 100%;
+        background-color: grey;
+        height:350px;
+        border:none;
+        margin-top:50px
+      }
+    </style>
   </head>
   <body style="min-hei">
     <nav class="navbar navbar-static-top" style="background-color:black;">
@@ -48,9 +59,38 @@
       </div>
 
       {% if receptor %}
+
       <div class="row">
-        <iframe src="{{ url_for('show_map') }}" style="width:100%;height:350px;border:none;margin-top:50px"></iframe>
+        <div id="map"></div>
+        <script type="text/javascript">
+
+        var locations = [];
+        var listaLatLong = {{ listaLatLong|tojson }};
+        for (var i = 0; i < listaLatLong.length; i++) {
+          locations.push({lat: listaLatLong[i][1], lng: listaLatLong[i][2]})
+        }
+        console.log(locations);
+
+
+        function initMap() {
+          var uluru = locations[0];
+          var map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 16,
+            center: uluru,
+            mapTypeId: 'hybrid'
+          });
+
+          for (var i = 0; i < locations.length; i++) {
+            var marker = new google.maps.Marker({
+              position: locations[i],
+              map: map
+            });
+          }
+        }
+        </script>
+
       </div>
+
       {% endif %}
 
       <div class="row" id="obs_values">
