@@ -30,7 +30,8 @@ class RinexFileReader:
             #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
             if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
                 _version = int(round(float(content[i][:10].strip()),0))
-                #print('detectou versao',str(_version))
+                #
+                ('detectou versao',str(_version))
 
             if content[i][-21:].strip() == 'APPROX POSITION XYZ':
                 dist = content[i][:50].strip().split(' ')
@@ -52,9 +53,20 @@ class RinexFileReader:
         if _version == 2:
             total_lines = len(content) - endOfHeaderLineNumber - 1
             lines_visited = 0
+
             while lines_visited < total_lines:
+                #print('endOfHeaderLineNumber',str(endOfHeaderLineNumber),'lines_visited',lines_visited)
                 linhas_pular = int(content[endOfHeaderLineNumber + 1 + lines_visited][30:32])
+                #se o número de satelites lido é maior que 12 deve pular mais uma linha
+                #pois o cabecalho do satelite pode ocupar até 3 linhas
+                if linhas_pular >= 36:
+                    linhas_pular += 3
+                elif linhas_pular >= 24:
+                    linhas_pular += 2
+                elif linhas_pular >= 12:
+                    linhas_pular += 1
                 fileBlock = content[endOfHeaderLineNumber + 1 + lines_visited:endOfHeaderLineNumber  + lines_visited+linhas_pular+2]
+                #print(fileBlock)
                 lines_visited += linhas_pular+1
                 for i in range(len(fileBlock)):
                     fileBlock[i] = fileBlock[i].replace('D', 'E')
@@ -190,7 +202,7 @@ class Receiver:
         F = -4.442807633E-10; # Constant, [sec/(meter)^(1/2)]
 
         tsat = obs.gpsSeconds()
-        print('Sat #',obs.sat_number)
+        #print('Sat #',obs.sat_number)
         for j in range(4):
             lista = self.ephemeris[obs.sat_number]
             lista = sorted(lista,key=lambda e: abs(tsat - e.gpsWeek()))
@@ -201,14 +213,14 @@ class Receiver:
             ephem.odot = ephem.OMEGA_dot
 
             n0 = (meu/ephem.a**3)**0.5
-            print('n0',n0)
+            #print('n0',n0)
             t = tsat-ephem.toe
             n = n0 + ephem.dn
             m = ephem.M0 + n*t
-            print('M0 coisas',ephem.M0,n,t,tsat,ephem.toe)
+            #print('M0 coisas',ephem.M0,n,t,tsat,ephem.toe)
             m_dot=n #% Calculate Velocity
             E = GPSUtils.kepOrb2E(m,ephem.e)
-            print('E',E)
+            #print('E',E)
 
             #Compute relativistic correction term
             dtr = F * ephem.e * ((ephem.a)**0.5) * math.sin(E)
@@ -217,7 +229,7 @@ class Receiver:
             # Compute satellite clock correction
             clkCorr= (ephem.af2 * (tsat-ephem.toc()) + ephem.af1) * (tsat-ephem.toc()) + ephem.af0
             obs.satClkCorr = clkCorr*c
-            print('ClockCorr',obs.satClkCorr)
+            #print('ClockCorr',obs.satClkCorr)
             t = t - clkCorr;
 
             E_dot=m_dot/(1-ephem.e*math.cos(E)) #Calculate Velocity
@@ -309,7 +321,7 @@ class Receiver:
                 sat.p2 = obs_data.p2
                 sat.l2 = obs_data.l2
                 sat.p3 = A*sat.c1+B*sat.p2
-                print('sat number',str(sat.sat_number),'c1',str(sat.c1),'p2',str(sat.p2),'p3',str(sat.p3))
+                #print('sat number',str(sat.sat_number),'c1',str(sat.c1),'p2',str(sat.p2),'p3',str(sat.p3))
                 obs_data.sat = sat
 
             for i in range(10):
@@ -528,13 +540,24 @@ class GPSFactory:
         epochMinute = int(fileBlock[0][13:15])
         epochSecond = int(round(float(fileBlock[0][16:26]),0))
 
-        auxString = fileBlock[0][31:].strip()
-        if 'G' in auxString:
-            auxSats = auxString.split('G')
-        else:
-            auxString2 = auxString.replace('  ',' ')
-            auxSats = auxString2.split(' ')
+
+        numSatelites = int(fileBlock[0][30:32])
+        auxString = fileBlock[0][32:].rstrip()
+        #depois de pegar os dados do cabecalho devemos cortar o fileblock
+        cortarFileblock = 1
+        if numSatelites > 12:
+            auxString +=fileBlock[1].strip()
+            cortarFileblock = 2
+        if numSatelites > 24:
+                auxString +=fileBlock[2].strip()
+                cortarFileblock = 3
+        auxSats = []
+        fileBlock = fileBlock[cortarFileblock:]
+        #print('auxString',auxString)
+        for i in range(numSatelites):
+            auxSats.append(auxString[i*3:(i+1)*3])
         #print('auxsats',auxSats)
+
         o = Observation()
         o.epochYear = epochYear
         o.epochMonth = epochMonth
@@ -543,7 +566,7 @@ class GPSFactory:
         o.epochMinute = epochMinute
         o.epochSecond = epochSecond
 
-        for j in range(1,len(auxSats)):
+        for j in range(0,len(auxSats)):
             obs = ObsData()
             obs.epochYear = epochYear
             obs.epochMonth = epochMonth
@@ -551,7 +574,11 @@ class GPSFactory:
             obs.epochHour = epochHour
             obs.epochMinute = epochMinute
             obs.epochSecond = epochSecond
-
+            #satelites com o codigo R nao sao GPS e portanto nao devem ser considerados
+            if 'R' in auxSats[j]:
+                continue
+            if 'G' in auxSats[j]:
+                auxSats[j] = auxSats[j][1:]
             try:
                 obs.sat_number = int(auxSats[j].strip())
 
