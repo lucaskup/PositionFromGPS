@@ -89,4 +89,4 @@ ENV/
 .ropeproject
 
 #arquivo de mapa
-templates/map.html
+#templates/map.html
