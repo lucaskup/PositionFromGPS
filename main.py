@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
 import os
 import sys
+from io import TextIOWrapper
 sys.path.append("..")
 from gpsMessageFile import RinexFileReader
 
@@ -37,10 +38,20 @@ def files():
             pass
         if f:
             filename = secure_filename(f.filename)
-            f.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            #print(f.read(1024))
+            f.seek(0)
+            nav_lines = f.read().decode("utf-8").replace('\r\n', '\n').replace('\r', '\n').split('\n')
+            if nav_lines[-1] == '':
+                nav_lines = nav_lines[:-1]
+
+            #print(nav_lines)
+            #f.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+
         #print(filename)
-        lista = r.readFromEphemeris(filename)
-        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        print(nav_lines[0][-21:].strip())
+        lista = r.readFromEphemeris(nav_lines)
+        #os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
         f2 = request.files['obs_file']
 
@@ -48,12 +59,18 @@ def files():
             pass
         if f2:
             filename = secure_filename(f2.filename)
-            f2.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        #print(filename)
+
+            f2.seek(0)
+            obs_lines = f2.read().decode("utf-8").replace('\r\n', '\n').replace('\r', '\n').split('\n')
+            if obs_lines[-1] == '':
+                obs_lines = obs_lines[:-1]
+
+            #f2.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            #print(filename)
             recep_comGPS = []
-            receptor = r.readFromObservation(filename,lista,max_obs)
+            receptor = r.readFromObservation(obs_lines,lista,max_obs)
             receptor.calculate_receiverPosition()
-            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            #os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
 
             #salvaMapa(converteLatLong(receptor))

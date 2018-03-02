@@ -20,43 +20,45 @@ LAMBDA_L5 = c / L5
 dicTypeObs = {}
 
 class RinexFileReader:
-    def readFromObservation(self,fileName,ephem,max_obs):
+    def readFromObservationFile(self,fileName,ephem,max_obs):
         with open(fileName,'r') as file:
             #print('Abriu Arquivo')
             content = file.readlines()
+        self.readFromObservation(content,ephem,max_obs)
+    def readFromObservation(self,file_lines,ephem,max_obs):
         lista_obs = []
         _aprox_position = (0,0,0)
-        for i in range(len(content)):
+        for i in range(len(file_lines)):
             #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
-            if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
-                _version = int(round(float(content[i][:10].strip()),0))
+            if file_lines[i][-21:].strip() == 'RINEX VERSION / TYPE':
+                _version = int(round(float(file_lines[i][:10].strip()),0))
                 #
                 ('detectou versao',str(_version))
 
-            if content[i][-21:].strip() == 'APPROX POSITION XYZ':
-                dist = content[i][:50].strip().split(' ')
+            if file_lines[i][-21:].strip() == 'APPROX POSITION XYZ':
+                dist = file_lines[i][:50].strip().split(' ')
                 _aprox_position = (float(dist[0]),float(dist[1]),float(dist[2]))
             #Detecta o fim do header do arquivo para possibilitar a importação dos dados
             #dos GPSs
-            if content[i][-21:].strip() == '# / TYPES OF OBSERV':
-                strAuxPosicoes = content[i][:50].strip().split('    ')
+            if file_lines[i][-21:].strip() == '# / TYPES OF OBSERV':
+                strAuxPosicoes = file_lines[i][:50].strip().split('    ')
                 typesPossiblePos = [(-15,-1),(50,66),(34,46), (17,32),(2,14)]
                 for typeObs in strAuxPosicoes:
                     if typeObs == 'C1' or typeObs == 'L1' or typeObs == 'P2' or typeObs == 'L2':
                         dicTypeObs[typeObs] = typesPossiblePos.pop()
 
-            if 'END OF HEADER' in content[i]:
+            if 'END OF HEADER' in file_lines[i]:
                 endOfHeaderLineNumber = i
                 #print('detectou header',str(i))
                 break
         #print('version', str(_version))
         if _version == 2:
-            total_lines = len(content) - endOfHeaderLineNumber - 1
+            total_lines = len(file_lines) - endOfHeaderLineNumber - 1
             lines_visited = 0
 
             while lines_visited < total_lines:
                 #print('endOfHeaderLineNumber',str(endOfHeaderLineNumber),'lines_visited',lines_visited)
-                linhas_pular = int(content[endOfHeaderLineNumber + 1 + lines_visited][30:32])
+                linhas_pular = int(file_lines[endOfHeaderLineNumber + 1 + lines_visited][30:32])
                 #se o número de satelites lido é maior que 12 deve pular mais uma linha
                 #pois o cabecalho do satelite pode ocupar até 3 linhas
                 if linhas_pular >= 36:
@@ -65,7 +67,7 @@ class RinexFileReader:
                     linhas_pular += 2
                 elif linhas_pular >= 12:
                     linhas_pular += 1
-                fileBlock = content[endOfHeaderLineNumber + 1 + lines_visited:endOfHeaderLineNumber  + lines_visited+linhas_pular+2]
+                fileBlock = file_lines[endOfHeaderLineNumber + 1 + lines_visited:endOfHeaderLineNumber  + lines_visited+linhas_pular+2]
                 #print(fileBlock)
                 lines_visited += linhas_pular+1
                 for i in range(len(fileBlock)):
@@ -91,35 +93,34 @@ class RinexFileReader:
         #print('eph',str(len(r.ephemeris)))
         #print('obs',str(len(r.observations)))
         return r
-
-    def readFromEphemeris(self,fileName):
-
-
+    def readFromEphemerisFile(self,fileName):
         with open(fileName,'r') as file:
             #print('Abriu Arquivo')
             content = file.readlines()
+        self.readFromEphemeris(content)
 
+    def readFromEphemeris(self,fileLines):
         endOfHeaderLineNumber = 0
         _version = 0
         lista_ephe = {}
-        for i in range(len(content)):
-            #print('Linha ',str(i),content[i])
+        for i in range(len(fileLines)):
+            #print('Linha ',str(i),fileLines[i])
             #Detecta a versão do arquivo rinex, atualmente aceita versão 2 ou 3
-            if content[i][-21:].strip() == 'RINEX VERSION / TYPE':
-                _version = int(round(float(content[i][:10].strip()),0))
+            if fileLines[i][-21:].strip() == 'RINEX VERSION / TYPE':
+                _version = int(round(float(fileLines[i][:10].strip()),0))
                 #print('detectou versao',str(_version))
             #Detecta o fim do header do arquivo para possibilitar a importação dos dados
             #dos GPSs
-            if 'END OF HEADER' in content[i]:
+            if 'END OF HEADER' in fileLines[i]:
                 endOfHeaderLineNumber = i
                 #print('detectou header',str(i))
                 break
         if _version == 2 or _version == 3:
-            iterationNumber = (len(content) - endOfHeaderLineNumber-1) // 8
+            iterationNumber = (len(fileLines) - endOfHeaderLineNumber-1) // 8
             for i in range(iterationNumber):
 
                 posToCut = endOfHeaderLineNumber+1+(8*i)
-                fileBlock = content[posToCut:posToCut+9]
+                fileBlock = fileLines[posToCut:posToCut+9]
                 for i in range(len(fileBlock)):
                     fileBlock[i] = fileBlock[i].replace('D', 'E')
                 if _version == 2 or fileBlock[0][0] == 'G':
@@ -129,6 +130,7 @@ class RinexFileReader:
                     lista_ephe[g.sat_number].append(g)
                 else:
                     lista_ephe = None
+        #print(lista_ephe)
         return lista_ephe
 class SatOrbit:
     def __init__(self):
